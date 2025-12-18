@@ -164,6 +164,18 @@ export function createServer(
     res.json({ success: true, message: 'Bot stopped' });
   });
 
+  // Reset bot (clear all trades)
+  app.post('/api/bot/reset', (req: Request, res: Response) => {
+    try {
+      db.clearAllTrades();
+      logger.warn('Bot reset - all trades cleared');
+      res.json({ success: true, message: 'All trades cleared' });
+    } catch (error) {
+      logger.error('Failed to reset bot', error);
+      res.status(500).json({ success: false, error: 'Failed to reset' });
+    }
+  });
+
   // Get trades
   app.get('/api/trades', (req: Request, res: Response) => {
     try {

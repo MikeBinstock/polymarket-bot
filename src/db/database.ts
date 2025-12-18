@@ -262,6 +262,15 @@ export class TradeDatabase {
     return result?.scan_time || null;
   }
 
+  /**
+   * Clear all trades (for reset)
+   */
+  clearAllTrades(): void {
+    this.db.exec('DELETE FROM trades');
+    this.db.exec('DELETE FROM scan_history');
+    logger.info('All trades and scan history cleared');
+  }
+
   close(): void {
     this.db.close();
     logger.info('Database closed');

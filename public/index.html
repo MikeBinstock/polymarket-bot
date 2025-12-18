@@ -664,6 +664,7 @@
         </div>
         <button class="btn btn-secondary" id="saveConfigBtn">💾 Save Config</button>
         <button class="btn btn-primary" id="forceScanBtn">🔍 Force Scan</button>
+        <button class="btn btn-secondary" id="resetBtn">🔄 Reset History</button>
         <button class="btn btn-danger" id="emergencyStopBtn">⛔ Emergency Stop</button>
       </div>
     </div>
@@ -729,6 +730,7 @@
     document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
     document.getElementById('forceScanBtn').addEventListener('click', forceScan);
     document.getElementById('emergencyStopBtn').addEventListener('click', emergencyStop);
+    document.getElementById('resetBtn').addEventListener('click', resetBot);
     document.getElementById('refreshTradesBtn').addEventListener('click', () => fetchStats());
     document.getElementById('refreshMarketsBtn').addEventListener('click', fetchLiveMarkets);
 
@@ -835,6 +837,18 @@
         fetchStats();
       } catch (error) {
         showToast('Failed to stop bot', 'error');
+      }
+    }
+
+    async function resetBot() {
+      if (!confirm('Are you sure you want to clear all trade history? This cannot be undone.')) return;
+      
+      try {
+        await apiCall('/bot/reset', 'POST');
+        showToast('Trade history cleared', 'success');
+        fetchStats();
+      } catch (error) {
+        showToast('Failed to reset: ' + error.message, 'error');
       }
     }
 

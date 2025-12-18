@@ -325,10 +325,40 @@ export class PolymarketClient {
       });
 
       const response = await this.client.postOrder(order);
-      logger.info('Order placed successfully', response);
+      
+      // Check if response contains an error
+      if (response && response.error) {
+        const errorMsg = response.error || 'Unknown error';
+        logger.error(`Order rejected by Polymarket: ${errorMsg}`, response);
+        throw new Error(`Order rejected: ${errorMsg}`);
+      }
+      
+      // Check if we got a valid order ID
+      if (!response || (!response.orderID && !response.id)) {
+        logger.error('Order response missing order ID', response);
+        throw new Error('Order failed: No order ID returned');
+      }
+      
+      logger.info(`Order placed successfully - ID: ${response.orderID || response.id}`);
       return response;
-    } catch (error) {
-      logger.error('Failed to place buy order', error);
+    } catch (error: any) {
+      // Parse error message for better logging
+      let errorMsg = 'Unknown error';
+      if (error instanceof Error) {
+        errorMsg = error.message;
+      } else if (typeof error === 'string') {
+        errorMsg = error;
+      } else if (error?.message) {
+        errorMsg = error.message;
+      }
+      
+      // Check for common errors
+      if (errorMsg.includes('balance') || errorMsg.includes('allowance')) {
+        logger.error(`💰 INSUFFICIENT FUNDS: ${errorMsg}`);
+        throw new Error('Insufficient USDC balance. Please deposit funds to your Polymarket wallet.');
+      }
+      
+      logger.error(`Failed to place buy order: ${errorMsg}`);
       throw error;
     }
   }

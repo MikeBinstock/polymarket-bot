@@ -185,6 +185,7 @@ export function createServer(
   });
 
   // Setup allowances (approve USDC for trading)
+  // Runs in background since blockchain txs take time
   app.post('/api/bot/approve', async (req: Request, res: Response) => {
     try {
       const client = (scheduler as any).client as import('../polymarket/client').PolymarketClient;
@@ -194,14 +195,21 @@ export function createServer(
         return;
       }
 
-      logger.info('Manually triggering USDC approval...');
-      await client.approveUsdcSpending();
+      logger.info('Starting USDC approval (runs in background)...');
       
-      logger.info('USDC approved successfully');
-      res.json({ success: true, message: 'USDC spending approved for Polymarket exchanges' });
+      // Start approval in background - don't await
+      client.approveUsdcSpending()
+        .then(() => logger.info('✅ USDC approval completed successfully!'))
+        .catch((err: any) => logger.error('❌ USDC approval failed:', err.message || err));
+      
+      // Return immediately
+      res.json({ 
+        success: true, 
+        message: 'USDC approval started! Check Railway logs for progress. This may take 30-60 seconds.' 
+      });
     } catch (error: any) {
-      logger.error('Failed to approve USDC', error);
-      res.status(500).json({ success: false, error: error.message || 'Failed to approve' });
+      logger.error('Failed to start USDC approval', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to start approval' });
     }
   });
 

@@ -487,23 +487,22 @@ export class PolymarketClient {
       const ctfAllowance = await usdc.allowance(address, CTF_EXCHANGE);
       logger.info(`Current CTF Exchange allowance: ${ethers.utils.formatUnits(ctfAllowance, 6)}`);
       
+      // Get current gas price and add 20% buffer
+      const gasPrice = await provider.getGasPrice();
+      const boostedGasPrice = gasPrice.mul(120).div(100);
+      logger.info(`Gas price: ${ethers.utils.formatUnits(gasPrice, 'gwei')} gwei (using ${ethers.utils.formatUnits(boostedGasPrice, 'gwei')} gwei)`);
+
+      const pendingTxs: { name: string; hash: string; promise: Promise<any> }[] = [];
+      
       if (ctfAllowance.lt(ethers.utils.parseUnits('1000000', 6))) {
         logger.info(`Approving ${usdcType} for CTF Exchange...`);
-        
-        // Get current gas price and add 20% buffer
-        const gasPrice = await provider.getGasPrice();
-        const boostedGasPrice = gasPrice.mul(120).div(100);
-        logger.info(`Gas price: ${ethers.utils.formatUnits(gasPrice, 'gwei')} gwei (using ${ethers.utils.formatUnits(boostedGasPrice, 'gwei')} gwei)`);
-        
         const tx1 = await usdc.approve(CTF_EXCHANGE, maxApproval, { 
           gasLimit: 100000,
           gasPrice: boostedGasPrice 
         });
-        logger.info(`Approval tx sent: ${tx1.hash}`);
-        logger.info(`View on Polygonscan: https://polygonscan.com/tx/${tx1.hash}`);
-        logger.info('Waiting for confirmation (this may take 10-30 seconds)...');
-        const receipt1 = await tx1.wait();
-        logger.info(`✅ CTF Exchange approved! Block: ${receipt1.blockNumber}, Gas used: ${receipt1.gasUsed.toString()}`);
+        logger.info(`✅ CTF Approval tx sent: ${tx1.hash}`);
+        logger.info(`   View: https://polygonscan.com/tx/${tx1.hash}`);
+        pendingTxs.push({ name: 'CTF Exchange', hash: tx1.hash, promise: tx1.wait() });
       } else {
         logger.info('✅ CTF Exchange already approved');
       }
@@ -514,21 +513,40 @@ export class PolymarketClient {
       
       if (negRiskAllowance.lt(ethers.utils.parseUnits('1000000', 6))) {
         logger.info(`Approving ${usdcType} for Neg Risk CTF Exchange...`);
-        
-        const gasPrice = await provider.getGasPrice();
-        const boostedGasPrice = gasPrice.mul(120).div(100);
-        
         const tx2 = await usdc.approve(NEG_RISK_CTF_EXCHANGE, maxApproval, { 
           gasLimit: 100000,
           gasPrice: boostedGasPrice 
         });
-        logger.info(`Approval tx sent: ${tx2.hash}`);
-        logger.info(`View on Polygonscan: https://polygonscan.com/tx/${tx2.hash}`);
-        logger.info('Waiting for confirmation...');
-        const receipt2 = await tx2.wait();
-        logger.info(`✅ Neg Risk CTF Exchange approved! Block: ${receipt2.blockNumber}`);
+        logger.info(`✅ Neg Risk Approval tx sent: ${tx2.hash}`);
+        logger.info(`   View: https://polygonscan.com/tx/${tx2.hash}`);
+        pendingTxs.push({ name: 'Neg Risk Exchange', hash: tx2.hash, promise: tx2.wait() });
       } else {
         logger.info('✅ Neg Risk CTF Exchange already approved');
+      }
+
+      // If we have pending transactions, wait for them in parallel (but don't block forever)
+      if (pendingTxs.length > 0) {
+        logger.info(`Waiting for ${pendingTxs.length} approval transaction(s)...`);
+        
+        // Wait with a timeout of 60 seconds
+        const timeout = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout waiting for confirmations')), 60000)
+        );
+        
+        try {
+          const results = await Promise.race([
+            Promise.all(pendingTxs.map(tx => tx.promise)),
+            timeout
+          ]);
+          logger.info('All approvals confirmed!');
+        } catch (waitError: any) {
+          if (waitError.message === 'Timeout waiting for confirmations') {
+            logger.warn('Transactions sent but confirmation timed out. Check Polygonscan for status.');
+            logger.info('The approvals are likely processing - bot will retry trades shortly.');
+          } else {
+            throw waitError;
+          }
+        }
       }
       
       logger.info('=== USDC Approval Complete! Ready to trade. ===');

@@ -8,14 +8,8 @@ const logger = createLogger('PolymarketClient');
 const CLOB_API_URL = 'https://clob.polymarket.com';
 const GAMMA_API_URL = 'https://gamma-api.polymarket.com';
 
-// Polygon contract addresses - using reliable RPC endpoints
-const POLYGON_RPCS = [
-  'https://polygon.llamarpc.com',
-  'https://polygon-bor-rpc.publicnode.com',
-  'https://polygon.drpc.org',
-  'https://polygon-rpc.com',
-];
-const POLYGON_RPC = POLYGON_RPCS[0]; // Use LlamaNodes as primary
+// Polygon contract addresses - using Ankr public RPC (most reliable free option)
+const POLYGON_RPC = 'https://rpc.ankr.com/polygon';
 const USDC_E_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'; // USDC.e (bridged) on Polygon
 const USDC_NATIVE_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // Native USDC on Polygon
 const CTF_EXCHANGE = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E'; // Polymarket CTF Exchange
@@ -496,11 +490,20 @@ export class PolymarketClient {
       
       if (ctfAllowance.lt(ethers.utils.parseUnits('1000000', 6))) {
         logger.info(`Approving ${usdcType} for CTF Exchange...`);
+        logger.info(`Spender address: ${CTF_EXCHANGE}`);
+        logger.info(`USDC contract: ${useNative ? USDC_NATIVE_ADDRESS : USDC_E_ADDRESS}`);
+        
+        // Get nonce explicitly
+        const nonce = await provider.getTransactionCount(address, 'pending');
+        logger.info(`Current nonce: ${nonce}`);
+        
         const tx1 = await usdc.approve(CTF_EXCHANGE, maxApproval, { 
           gasLimit: 100000,
-          gasPrice: boostedGasPrice 
+          gasPrice: boostedGasPrice,
+          nonce: nonce
         });
-        logger.info(`✅ CTF Approval tx sent: ${tx1.hash}`);
+        logger.info(`✅ CTF Approval tx sent!`);
+        logger.info(`   Hash: ${tx1.hash}`);
         logger.info(`   View: https://polygonscan.com/tx/${tx1.hash}`);
         pendingTxs.push({ name: 'CTF Exchange', hash: tx1.hash, promise: tx1.wait() });
       } else {
@@ -513,11 +516,19 @@ export class PolymarketClient {
       
       if (negRiskAllowance.lt(ethers.utils.parseUnits('1000000', 6))) {
         logger.info(`Approving ${usdcType} for Neg Risk CTF Exchange...`);
+        logger.info(`Spender address: ${NEG_RISK_CTF_EXCHANGE}`);
+        
+        // Get fresh nonce (might have incremented from first tx)
+        const nonce2 = await provider.getTransactionCount(address, 'pending');
+        logger.info(`Current nonce: ${nonce2}`);
+        
         const tx2 = await usdc.approve(NEG_RISK_CTF_EXCHANGE, maxApproval, { 
           gasLimit: 100000,
-          gasPrice: boostedGasPrice 
+          gasPrice: boostedGasPrice,
+          nonce: nonce2
         });
-        logger.info(`✅ Neg Risk Approval tx sent: ${tx2.hash}`);
+        logger.info(`✅ Neg Risk Approval tx sent!`);
+        logger.info(`   Hash: ${tx2.hash}`);
         logger.info(`   View: https://polygonscan.com/tx/${tx2.hash}`);
         pendingTxs.push({ name: 'Neg Risk Exchange', hash: tx2.hash, promise: tx2.wait() });
       } else {

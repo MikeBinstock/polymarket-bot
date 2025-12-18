@@ -93,15 +93,9 @@ export class PolymarketClient {
         this.apiCreds
       );
 
-      // Set up allowances for trading (approve USDC spending)
-      // Do this in the background to not block startup
-      logger.info('Will check/setup token allowances in background...');
-      this.approveUsdcSpending().then(() => {
-        logger.info('Token allowances verified/set successfully');
-      }).catch((allowanceError: any) => {
-        logger.warn(`Allowance setup skipped: ${allowanceError.message || allowanceError}`);
-        logger.warn('You may need to manually approve USDC via the dashboard');
-      });
+      // Skip auto-approval on startup - user can trigger manually via dashboard
+      // This avoids startup delays and potential crashes
+      logger.info('USDC approval can be triggered via dashboard when ready to trade');
 
       this.isInitialized = true;
       this.initError = null;
@@ -441,16 +435,28 @@ export class PolymarketClient {
       throw new Error('No wallet configured');
     }
 
+    logger.info('=== Starting USDC Approval Process ===');
+    
     try {
+      logger.info('Connecting to Polygon RPC...');
       const provider = new ethers.providers.JsonRpcProvider(POLYGON_RPC);
       const connectedWallet = this.wallet.connect(provider);
       const address = await connectedWallet.getAddress();
+      logger.info(`Wallet address: ${address}`);
+      
+      // Check POL balance for gas
+      const polBalance = await provider.getBalance(address);
+      logger.info(`POL Balance (for gas): ${ethers.utils.formatEther(polBalance)} POL`);
+      
+      if (polBalance.lt(ethers.utils.parseEther('0.001'))) {
+        throw new Error('Insufficient POL for gas fees. Need at least 0.001 POL.');
+      }
       
       // Check both USDC types
+      logger.info('Checking USDC balances...');
       const usdcE = new ethers.Contract(USDC_E_ADDRESS, ERC20_ABI, connectedWallet);
       const usdcNative = new ethers.Contract(USDC_NATIVE_ADDRESS, ERC20_ABI, connectedWallet);
       
-      // Check balances
       const balanceE = await usdcE.balanceOf(address);
       const balanceNative = await usdcNative.balanceOf(address);
       logger.info(`USDC.e Balance: ${ethers.utils.formatUnits(balanceE, 6)} USDC`);
@@ -460,40 +466,52 @@ export class PolymarketClient {
       const useNative = balanceNative.gt(balanceE);
       const usdc = useNative ? usdcNative : usdcE;
       const usdcType = useNative ? 'Native USDC' : 'USDC.e';
-      logger.info(`Using ${usdcType} for trading`);
+      const balance = useNative ? balanceNative : balanceE;
+      
+      if (balance.isZero()) {
+        throw new Error('No USDC balance found. Please deposit USDC first.');
+      }
+      
+      logger.info(`Using ${usdcType} for trading (balance: ${ethers.utils.formatUnits(balance, 6)})`);
       
       // Max approval amount
       const maxApproval = ethers.constants.MaxUint256;
       
       // Check and approve CTF Exchange
       const ctfAllowance = await usdc.allowance(address, CTF_EXCHANGE);
-      logger.info(`Current CTF Exchange allowance (${usdcType}): ${ethers.utils.formatUnits(ctfAllowance, 6)}`);
+      logger.info(`Current CTF Exchange allowance: ${ethers.utils.formatUnits(ctfAllowance, 6)}`);
       
       if (ctfAllowance.lt(ethers.utils.parseUnits('1000000', 6))) {
         logger.info(`Approving ${usdcType} for CTF Exchange...`);
-        const tx1 = await usdc.approve(CTF_EXCHANGE, maxApproval);
+        const tx1 = await usdc.approve(CTF_EXCHANGE, maxApproval, { gasLimit: 100000 });
         logger.info(`Approval tx sent: ${tx1.hash}`);
+        logger.info('Waiting for confirmation...');
         await tx1.wait();
-        logger.info('CTF Exchange approved ✓');
+        logger.info('✅ CTF Exchange approved!');
       } else {
-        logger.info('CTF Exchange already approved ✓');
+        logger.info('✅ CTF Exchange already approved');
       }
 
       // Check and approve Neg Risk CTF Exchange
       const negRiskAllowance = await usdc.allowance(address, NEG_RISK_CTF_EXCHANGE);
-      logger.info(`Current Neg Risk Exchange allowance (${usdcType}): ${ethers.utils.formatUnits(negRiskAllowance, 6)}`);
+      logger.info(`Current Neg Risk Exchange allowance: ${ethers.utils.formatUnits(negRiskAllowance, 6)}`);
       
       if (negRiskAllowance.lt(ethers.utils.parseUnits('1000000', 6))) {
         logger.info(`Approving ${usdcType} for Neg Risk CTF Exchange...`);
-        const tx2 = await usdc.approve(NEG_RISK_CTF_EXCHANGE, maxApproval);
+        const tx2 = await usdc.approve(NEG_RISK_CTF_EXCHANGE, maxApproval, { gasLimit: 100000 });
         logger.info(`Approval tx sent: ${tx2.hash}`);
+        logger.info('Waiting for confirmation...');
         await tx2.wait();
-        logger.info('Neg Risk CTF Exchange approved ✓');
+        logger.info('✅ Neg Risk CTF Exchange approved!');
       } else {
-        logger.info('Neg Risk CTF Exchange already approved ✓');
+        logger.info('✅ Neg Risk CTF Exchange already approved');
       }
+      
+      logger.info('=== USDC Approval Complete! Ready to trade. ===');
     } catch (error: any) {
-      logger.error(`USDC approval error: ${error.message || error}`);
+      logger.error('=== USDC Approval Failed ===');
+      logger.error(`Error: ${error.message || error}`);
+      if (error.code) logger.error(`Error code: ${error.code}`);
       throw error;
     }
   }

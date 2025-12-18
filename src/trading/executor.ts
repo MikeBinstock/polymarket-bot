@@ -18,13 +18,14 @@ export class TradeExecutor {
   async executeStraddle(opportunity: StraddleOpportunity): Promise<Trade | null> {
     const tradeId = uuidv4();
     
-    logger.info(`Executing straddle for market: ${opportunity.market.question}`, {
-      tradeId,
-      upPrice: opportunity.upPrice,
-      downPrice: opportunity.downPrice,
-      upSize: opportunity.upSize,
-      downSize: opportunity.downSize,
-    });
+    logger.info(`=== EXECUTING STRADDLE ===`);
+    logger.info(`Trade ID: ${tradeId}`);
+    logger.info(`Market: ${opportunity.market.question}`);
+    logger.info(`Up Token: ${opportunity.upToken.token_id}`);
+    logger.info(`Down Token: ${opportunity.downToken.token_id}`);
+    logger.info(`Up Price: $${opportunity.upPrice.toFixed(3)} | Size: ${opportunity.upSize.toFixed(2)}`);
+    logger.info(`Down Price: $${opportunity.downPrice.toFixed(3)} | Size: ${opportunity.downSize.toFixed(2)}`);
+    logger.info(`Combined Cost: $${opportunity.combinedCost.toFixed(3)}`);
 
     // Create trade record
     const trade: Trade = {
@@ -43,45 +44,70 @@ export class TradeExecutor {
     };
 
     // Save trade to database
-    this.db.saveTrade(trade);
+    try {
+      logger.info(`Saving trade ${tradeId} to database...`);
+      this.db.saveTrade(trade);
+      logger.info(`Trade ${tradeId} saved to database`);
+    } catch (dbError) {
+      logger.error(`Failed to save trade to database:`, dbError);
+      return null;
+    }
 
-    if (this.client.isReadOnly()) {
+    // Check if client is in read-only mode
+    const isReadOnly = this.client.isReadOnly();
+    logger.info(`Client read-only mode: ${isReadOnly}`);
+
+    if (isReadOnly) {
       logger.warn('Client is in read-only mode - simulating trade');
       trade.status = 'open';
       trade.up_order_id = 'simulated-up-' + tradeId;
       trade.down_order_id = 'simulated-down-' + tradeId;
       this.db.updateTrade(trade);
+      logger.info(`Simulated trade ${tradeId} created successfully`);
       return trade;
     }
 
     try {
       // Place UP order
-      logger.info(`Placing UP order: ${opportunity.upSize} shares at $${opportunity.upPrice}`);
+      logger.info(`Placing UP order: ${opportunity.upSize.toFixed(2)} shares at $${opportunity.upPrice.toFixed(3)}`);
       const upOrder = await this.client.placeBuyOrder(
         opportunity.upToken.token_id,
         opportunity.upPrice,
         opportunity.upSize
       );
+      logger.info(`UP order placed:`, upOrder);
       trade.up_order_id = upOrder.orderID || upOrder.id;
       trade.status = 'partial';
       this.db.updateTrade(trade);
 
       // Place DOWN order
-      logger.info(`Placing DOWN order: ${opportunity.downSize} shares at $${opportunity.downPrice}`);
+      logger.info(`Placing DOWN order: ${opportunity.downSize.toFixed(2)} shares at $${opportunity.downPrice.toFixed(3)}`);
       const downOrder = await this.client.placeBuyOrder(
         opportunity.downToken.token_id,
         opportunity.downPrice,
         opportunity.downSize
       );
+      logger.info(`DOWN order placed:`, downOrder);
       trade.down_order_id = downOrder.orderID || downOrder.id;
       trade.status = 'open';
       this.db.updateTrade(trade);
 
-      logger.info(`Straddle executed successfully: ${tradeId}`);
+      logger.info(`=== STRADDLE EXECUTED SUCCESSFULLY ===`);
+      logger.info(`Trade ID: ${tradeId}`);
+      logger.info(`UP Order ID: ${trade.up_order_id}`);
+      logger.info(`DOWN Order ID: ${trade.down_order_id}`);
       return trade;
 
     } catch (error) {
-      logger.error(`Failed to execute straddle: ${tradeId}`, error);
+      logger.error(`=== STRADDLE EXECUTION FAILED ===`);
+      logger.error(`Trade ID: ${tradeId}`);
+      if (error instanceof Error) {
+        logger.error(`Error: ${error.message}`);
+        logger.error(`Stack: ${error.stack}`);
+      } else {
+        logger.error(`Error:`, error);
+      }
+      
       trade.status = 'failed';
       this.db.updateTrade(trade);
 
@@ -89,6 +115,7 @@ export class TradeExecutor {
       if (trade.up_order_id) {
         try {
           await this.client.cancelOrder(trade.up_order_id);
+          logger.info(`Cancelled UP order: ${trade.up_order_id}`);
         } catch (cancelError) {
           logger.error('Failed to cancel UP order', cancelError);
         }
@@ -96,6 +123,7 @@ export class TradeExecutor {
       if (trade.down_order_id) {
         try {
           await this.client.cancelOrder(trade.down_order_id);
+          logger.info(`Cancelled DOWN order: ${trade.down_order_id}`);
         } catch (cancelError) {
           logger.error('Failed to cancel DOWN order', cancelError);
         }
@@ -110,24 +138,38 @@ export class TradeExecutor {
    */
   async executeStraddles(opportunities: StraddleOpportunity[]): Promise<Trade[]> {
     const trades: Trade[] = [];
+    
+    logger.info(`executeStraddles called with ${opportunities.length} opportunities`);
 
-    for (const opportunity of opportunities) {
+    for (let i = 0; i < opportunities.length; i++) {
+      const opportunity = opportunities[i];
+      logger.info(`Processing opportunity ${i + 1}/${opportunities.length}: ${opportunity.market.question}`);
+      
       // Check if we already have an open trade for this market
       const existingTrade = this.db.getTradeByMarketId(opportunity.market.condition_id);
       if (existingTrade && ['pending', 'open', 'partial'].includes(existingTrade.status)) {
-        logger.info(`Skipping market ${opportunity.market.condition_id} - already have open trade`);
+        logger.info(`Skipping market ${opportunity.market.condition_id} - already have open trade (${existingTrade.id})`);
         continue;
       }
 
-      const trade = await this.executeStraddle(opportunity);
-      if (trade) {
-        trades.push(trade);
+      try {
+        logger.info(`No existing trade found, executing new straddle...`);
+        const trade = await this.executeStraddle(opportunity);
+        if (trade) {
+          trades.push(trade);
+          logger.info(`Trade created: ${trade.id} with status ${trade.status}`);
+        } else {
+          logger.warn(`executeStraddle returned null for ${opportunity.market.question}`);
+        }
+      } catch (error) {
+        logger.error(`Error executing straddle for ${opportunity.market.question}:`, error);
       }
 
       // Add small delay between orders to avoid rate limiting
       await this.delay(500);
     }
 
+    logger.info(`executeStraddles complete: ${trades.length} trades created`);
     return trades;
   }
 

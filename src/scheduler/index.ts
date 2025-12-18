@@ -99,10 +99,12 @@ export class TradingScheduler {
       });
 
       // Scan for hourly BTC Up/Down markets
+      logger.info('Fetching hourly BTC markets from Gamma API...');
       const hourlyMarkets = await this.scanner.scanHourlyBTCMarkets();
       logger.info(`Found ${hourlyMarkets.length} hourly BTC markets`);
 
       // Store live market data for dashboard
+      logger.info('Building live market data for dashboard...');
       this.lastScannedMarkets = hourlyMarkets.map(market => {
         const opportunity = this.calculator.analyzeHourlyMarket(market);
         return {
@@ -116,24 +118,46 @@ export class TradingScheduler {
           expectedValue: opportunity?.expectedValue || 0,
         };
       });
+      logger.info(`Built ${this.lastScannedMarkets.length} live market entries`);
 
       // Find straddle opportunities in hourly markets
+      logger.info('Finding straddle opportunities...');
       const opportunities = this.calculator.findHourlyOpportunities(hourlyMarkets);
       logger.info(`Found ${opportunities.length} viable straddle opportunities`);
 
       // Execute trades
       let tradesExecuted = 0;
       if (opportunities.length > 0) {
-        const trades = await this.executor.executeStraddles(opportunities);
-        tradesExecuted = trades.length;
-        logger.info(`Executed ${tradesExecuted} trades`);
+        logger.info(`Attempting to execute ${opportunities.length} straddle trade(s)...`);
+        logger.info(`Client read-only mode: ${this.client.isReadOnly()}`);
+        
+        try {
+          const trades = await this.executor.executeStraddles(opportunities);
+          tradesExecuted = trades.length;
+          logger.info(`Successfully executed ${tradesExecuted} trades`);
+          
+          if (trades.length > 0) {
+            trades.forEach(trade => {
+              logger.info(`Trade ${trade.id}: ${trade.market_question} - Status: ${trade.status}`);
+            });
+          }
+        } catch (execError) {
+          logger.error('Trade execution failed:', execError);
+        }
+      } else {
+        logger.info('No viable opportunities to trade at this time');
       }
 
       // Record scan in database
       this.db.recordScan(hourlyMarkets.length, opportunities.length, tradesExecuted);
+      logger.info(`Scan complete: ${hourlyMarkets.length} markets, ${opportunities.length} opportunities, ${tradesExecuted} trades`);
 
     } catch (error) {
-      logger.error('Scan failed', error);
+      logger.error('Scan failed with error:', error);
+      if (error instanceof Error) {
+        logger.error(`Error message: ${error.message}`);
+        logger.error(`Error stack: ${error.stack}`);
+      }
     } finally {
       this.isRunning = false;
     }

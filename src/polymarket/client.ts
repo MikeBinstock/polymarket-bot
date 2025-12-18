@@ -10,7 +10,8 @@ const GAMMA_API_URL = 'https://gamma-api.polymarket.com';
 
 // Polygon contract addresses
 const POLYGON_RPC = 'https://polygon-rpc.com';
-const USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'; // USDC.e on Polygon
+const USDC_E_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'; // USDC.e (bridged) on Polygon
+const USDC_NATIVE_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // Native USDC on Polygon
 const CTF_EXCHANGE = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E'; // Polymarket CTF Exchange
 const NEG_RISK_CTF_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a'; // Neg Risk Exchange
 
@@ -433,6 +434,7 @@ export class PolymarketClient {
   /**
    * Approve USDC spending for Polymarket exchanges
    * This is required before placing any orders
+   * Checks BOTH USDC.e and native USDC
    */
   async approveUsdcSpending(): Promise<void> {
     if (!this.wallet) {
@@ -442,24 +444,33 @@ export class PolymarketClient {
     try {
       const provider = new ethers.providers.JsonRpcProvider(POLYGON_RPC);
       const connectedWallet = this.wallet.connect(provider);
-      const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, connectedWallet);
+      const address = await connectedWallet.getAddress();
+      
+      // Check both USDC types
+      const usdcE = new ethers.Contract(USDC_E_ADDRESS, ERC20_ABI, connectedWallet);
+      const usdcNative = new ethers.Contract(USDC_NATIVE_ADDRESS, ERC20_ABI, connectedWallet);
+      
+      // Check balances
+      const balanceE = await usdcE.balanceOf(address);
+      const balanceNative = await usdcNative.balanceOf(address);
+      logger.info(`USDC.e Balance: ${ethers.utils.formatUnits(balanceE, 6)} USDC`);
+      logger.info(`Native USDC Balance: ${ethers.utils.formatUnits(balanceNative, 6)} USDC`);
+      
+      // Determine which USDC to use (whichever has balance)
+      const useNative = balanceNative.gt(balanceE);
+      const usdc = useNative ? usdcNative : usdcE;
+      const usdcType = useNative ? 'Native USDC' : 'USDC.e';
+      logger.info(`Using ${usdcType} for trading`);
       
       // Max approval amount
       const maxApproval = ethers.constants.MaxUint256;
-
-      // Check current allowances
-      const address = await connectedWallet.getAddress();
-      
-      // Check USDC balance first
-      const balance = await usdc.balanceOf(address);
-      logger.info(`USDC Balance: ${ethers.utils.formatUnits(balance, 6)} USDC`);
       
       // Check and approve CTF Exchange
       const ctfAllowance = await usdc.allowance(address, CTF_EXCHANGE);
-      logger.info(`Current CTF Exchange allowance: ${ethers.utils.formatUnits(ctfAllowance, 6)} USDC`);
+      logger.info(`Current CTF Exchange allowance (${usdcType}): ${ethers.utils.formatUnits(ctfAllowance, 6)}`);
       
       if (ctfAllowance.lt(ethers.utils.parseUnits('1000000', 6))) {
-        logger.info('Approving USDC for CTF Exchange...');
+        logger.info(`Approving ${usdcType} for CTF Exchange...`);
         const tx1 = await usdc.approve(CTF_EXCHANGE, maxApproval);
         logger.info(`Approval tx sent: ${tx1.hash}`);
         await tx1.wait();
@@ -470,10 +481,10 @@ export class PolymarketClient {
 
       // Check and approve Neg Risk CTF Exchange
       const negRiskAllowance = await usdc.allowance(address, NEG_RISK_CTF_EXCHANGE);
-      logger.info(`Current Neg Risk Exchange allowance: ${ethers.utils.formatUnits(negRiskAllowance, 6)} USDC`);
+      logger.info(`Current Neg Risk Exchange allowance (${usdcType}): ${ethers.utils.formatUnits(negRiskAllowance, 6)}`);
       
       if (negRiskAllowance.lt(ethers.utils.parseUnits('1000000', 6))) {
-        logger.info('Approving USDC for Neg Risk CTF Exchange...');
+        logger.info(`Approving ${usdcType} for Neg Risk CTF Exchange...`);
         const tx2 = await usdc.approve(NEG_RISK_CTF_EXCHANGE, maxApproval);
         logger.info(`Approval tx sent: ${tx2.hash}`);
         await tx2.wait();
@@ -488,26 +499,48 @@ export class PolymarketClient {
   }
 
   /**
-   * Check USDC balance and allowances
+   * Check USDC balance and allowances (both USDC.e and native USDC)
    */
-  async checkUsdcStatus(): Promise<{ balance: string; ctfAllowance: string; negRiskAllowance: string }> {
+  async checkUsdcStatus(): Promise<{ 
+    usdcE: { balance: string; ctfAllowance: string; negRiskAllowance: string };
+    usdcNative: { balance: string; ctfAllowance: string; negRiskAllowance: string };
+    total: string;
+  }> {
     if (!this.wallet) {
       throw new Error('No wallet configured');
     }
 
     const provider = new ethers.providers.JsonRpcProvider(POLYGON_RPC);
     const connectedWallet = this.wallet.connect(provider);
-    const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, connectedWallet);
     const address = await connectedWallet.getAddress();
+    
+    const usdcE = new ethers.Contract(USDC_E_ADDRESS, ERC20_ABI, connectedWallet);
+    const usdcNative = new ethers.Contract(USDC_NATIVE_ADDRESS, ERC20_ABI, connectedWallet);
 
-    const balance = await usdc.balanceOf(address);
-    const ctfAllowance = await usdc.allowance(address, CTF_EXCHANGE);
-    const negRiskAllowance = await usdc.allowance(address, NEG_RISK_CTF_EXCHANGE);
+    // Check USDC.e
+    const balanceE = await usdcE.balanceOf(address);
+    const ctfAllowanceE = await usdcE.allowance(address, CTF_EXCHANGE);
+    const negRiskAllowanceE = await usdcE.allowance(address, NEG_RISK_CTF_EXCHANGE);
+
+    // Check native USDC
+    const balanceNative = await usdcNative.balanceOf(address);
+    const ctfAllowanceNative = await usdcNative.allowance(address, CTF_EXCHANGE);
+    const negRiskAllowanceNative = await usdcNative.allowance(address, NEG_RISK_CTF_EXCHANGE);
+
+    const totalBalance = balanceE.add(balanceNative);
 
     return {
-      balance: ethers.utils.formatUnits(balance, 6),
-      ctfAllowance: ethers.utils.formatUnits(ctfAllowance, 6),
-      negRiskAllowance: ethers.utils.formatUnits(negRiskAllowance, 6),
+      usdcE: {
+        balance: ethers.utils.formatUnits(balanceE, 6),
+        ctfAllowance: ethers.utils.formatUnits(ctfAllowanceE, 6),
+        negRiskAllowance: ethers.utils.formatUnits(negRiskAllowanceE, 6),
+      },
+      usdcNative: {
+        balance: ethers.utils.formatUnits(balanceNative, 6),
+        ctfAllowance: ethers.utils.formatUnits(ctfAllowanceNative, 6),
+        negRiskAllowance: ethers.utils.formatUnits(negRiskAllowanceNative, 6),
+      },
+      total: ethers.utils.formatUnits(totalBalance, 6),
     };
   }
 }

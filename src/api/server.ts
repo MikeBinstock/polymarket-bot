@@ -205,7 +205,7 @@ export function createServer(
     }
   });
 
-  // Check USDC status (balance and allowances)
+  // Check USDC status (balance and allowances for both USDC types)
   app.get('/api/bot/usdc-status', async (req: Request, res: Response) => {
     try {
       const client = (scheduler as any).client as import('../polymarket/client').PolymarketClient;
@@ -216,7 +216,14 @@ export function createServer(
       }
 
       const status = await client.checkUsdcStatus();
-      res.json({ success: true, data: status });
+      
+      // Format for easy display
+      const formatted = {
+        ...status,
+        summary: `Total: ${status.total} USDC (USDC.e: ${status.usdcE.balance}, Native: ${status.usdcNative.balance})`
+      };
+      
+      res.json({ success: true, data: formatted });
     } catch (error: any) {
       logger.error('Failed to check USDC status', error);
       res.status(500).json({ success: false, error: error.message || 'Failed to check status' });

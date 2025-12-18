@@ -122,8 +122,10 @@ export interface BitcoinMarketFilter {
 
 export const BITCOIN_MARKET_FILTER: BitcoinMarketFilter = {
   keywords: [
-    'bitcoin',
-    'btc',
+    'bitcoin up or down',
+    'btc up or down',
+    'bitcoin updown',
+    'btc-updown',
   ],
   excludeKeywords: [],
 };

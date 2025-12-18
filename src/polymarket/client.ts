@@ -82,7 +82,8 @@ export class PolymarketClient {
 
   async getMarkets(): Promise<any[]> {
     try {
-      const response = await fetch(`${GAMMA_API_URL}/markets?closed=false&limit=500`);
+      // Fetch markets with high limit to find all Bitcoin up/down markets
+      const response = await fetch(`${GAMMA_API_URL}/markets?closed=false&limit=1000`);
       if (!response.ok) {
         throw new Error(`Failed to fetch markets: ${response.statusText}`);
       }

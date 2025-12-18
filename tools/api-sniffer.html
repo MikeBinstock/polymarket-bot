@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Polymarket API Sniffer</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      padding: 20px;
+      margin: 0;
+    }
+    h1 { color: #58a6ff; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .instructions {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .instructions h2 { color: #7ee787; margin-top: 0; }
+    .instructions ol { line-height: 1.8; }
+    .instructions code {
+      background: #0d1117;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #ff7b72;
+    }
+    textarea {
+      width: 100%;
+      height: 200px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      color: #e6edf3;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 12px;
+      resize: vertical;
+    }
+    button {
+      background: #238636;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      margin: 10px 5px 10px 0;
+    }
+    button:hover { background: #2ea043; }
+    button.secondary { background: #21262d; border: 1px solid #30363d; }
+    button.secondary:hover { background: #30363d; }
+    #results {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 20px;
+      white-space: pre-wrap;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    .found { color: #7ee787; font-weight: bold; }
+    .endpoint { color: #58a6ff; }
+    .warning { color: #d29922; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Polymarket API Sniffer</h1>
+    
+    <div class="instructions">
+      <h2>Step 1: Capture Network Data</h2>
+      <ol>
+        <li>Open a new browser tab and go to: <code>https://polymarket.com/markets?_c=crypto</code></li>
+        <li>Open Developer Tools (<code>F12</code> or <code>Cmd+Option+I</code>)</li>
+        <li>Go to the <strong>Network</strong> tab</li>
+        <li>Click <strong>Clear</strong> to clear existing requests</li>
+        <li>Now navigate to a Bitcoin Up/Down market: <code>https://polymarket.com/event/btc-updown-15m-...</code></li>
+        <li>Wait for the page to fully load</li>
+        <li>Right-click in the Network panel → <strong>Copy</strong> → <strong>Copy all as HAR</strong></li>
+        <li>Paste the HAR data below and click <strong>Analyze</strong></li>
+      </ol>
+    </div>
+
+    <h2>Step 2: Paste HAR Data</h2>
+    <textarea id="harInput" placeholder="Paste your HAR JSON data here..."></textarea>
+    <br>
+    <button onclick="analyzeHar()">🔍 Analyze HAR Data</button>
+    <button class="secondary" onclick="document.getElementById('harInput').value=''">Clear</button>
+    <button class="secondary" onclick="copyResults()">📋 Copy Results</button>
+
+    <div id="results"></div>
+  </div>
+
+  <script>
+    function analyzeHar() {
+      const input = document.getElementById('harInput').value.trim();
+      const results = document.getElementById('results');
+      
+      if (!input) {
+        results.innerHTML = '<span class="warning">Please paste HAR data first!</span>';
+        return;
+      }
+      
+      let har;
+      try {
+        har = JSON.parse(input);
+      } catch (e) {
+        results.innerHTML = '<span class="warning">Invalid JSON! Make sure you copied the full HAR data.</span>\n\nError: ' + e.message;
+        return;
+      }
+      
+      const entries = har.log?.entries || [];
+      let output = '';
+      
+      output += `📊 Total requests captured: ${entries.length}\n\n`;
+      
+      // Keywords to search for
+      const keywords = ['btc', 'bitcoin', 'up', 'down', 'updown', 'token', 'clob', 'gamma', 'market', 'order', 'price'];
+      
+      const websockets = [];
+      const apiCalls = [];
+      const marketData = [];
+      
+      for (const entry of entries) {
+        const url = entry.request?.url || '';
+        const method = entry.request?.method || '';
+        const urlLower = url.toLowerCase();
+        
+        // Check for WebSockets
+        if (url.startsWith('wss://') || url.includes('websocket')) {
+          websockets.push(url);
+          continue;
+        }
+        
+        // Check for API calls with keywords
+        const matchedKeywords = keywords.filter(k => urlLower.includes(k));
+        if (matchedKeywords.length > 0 || urlLower.includes('api')) {
+          let responseText = '';
+          try {
+            responseText = entry.response?.content?.text || '';
+          } catch (e) {}
+          
+          apiCalls.push({
+            url,
+            method,
+            status: entry.response?.status,
+            keywords: matchedKeywords,
+            response: responseText
+          });
+          
+          // Check for Up/Down market data
+          if (responseText.includes('"Up"') && responseText.includes('"Down"')) {
+            marketData.push({ url, response: responseText });
+          }
+          if (responseText.includes('"outcome":"Up"') || responseText.includes('"outcome":"Down"')) {
+            marketData.push({ url, response: responseText });
+          }
+        }
+      }
+      
+      // WebSocket connections
+      output += '='.repeat(60) + '\n';
+      output += '<span class="endpoint">🌐 WEBSOCKET CONNECTIONS</span>\n';
+      output += '='.repeat(60) + '\n';
+      if (websockets.length === 0) {
+        output += 'None found\n';
+      } else {
+        websockets.forEach(ws => output += `  ${ws}\n`);
+      }
+      
+      // Market data with Up/Down
+      output += '\n' + '='.repeat(60) + '\n';
+      output += '<span class="found">🎯 MARKETS WITH UP/DOWN TOKENS</span>\n';
+      output += '='.repeat(60) + '\n';
+      if (marketData.length === 0) {
+        output += 'None found yet - try navigating to a BTC Up/Down market\n';
+      } else {
+        marketData.forEach((m, i) => {
+          output += `\n[${i+1}] <span class="found">FOUND!</span> ${m.url}\n`;
+          output += `Response preview:\n${m.response.substring(0, 500)}...\n`;
+        });
+      }
+      
+      // API calls
+      output += '\n' + '='.repeat(60) + '\n';
+      output += '<span class="endpoint">📡 API CALLS (filtered)</span>\n';
+      output += '='.repeat(60) + '\n';
+      
+      const uniqueEndpoints = new Set();
+      apiCalls.forEach(call => {
+        try {
+          const urlObj = new URL(call.url);
+          uniqueEndpoints.add(`${urlObj.protocol}//${urlObj.host}${urlObj.pathname}`);
+        } catch (e) {}
+      });
+      
+      output += '\nUnique endpoints:\n';
+      uniqueEndpoints.forEach(ep => output += `  <span class="endpoint">${ep}</span>\n`);
+      
+      output += '\n\nDetailed calls:\n';
+      apiCalls.slice(0, 30).forEach((call, i) => {
+        output += `\n[${i+1}] ${call.method} ${call.url.substring(0, 100)}${call.url.length > 100 ? '...' : ''}\n`;
+        output += `    Status: ${call.status} | Keywords: ${call.keywords.join(', ')}\n`;
+      });
+      
+      if (apiCalls.length > 30) {
+        output += `\n... and ${apiCalls.length - 30} more API calls\n`;
+      }
+      
+      // Search for condition IDs
+      output += '\n' + '='.repeat(60) + '\n';
+      output += '<span class="endpoint">🔑 CONDITION IDs FOUND</span>\n';
+      output += '='.repeat(60) + '\n';
+      
+      const conditionIds = new Set();
+      for (const entry of entries) {
+        const text = entry.response?.content?.text || '';
+        const matches = text.match(/0x[a-fA-F0-9]{64}/g) || [];
+        matches.forEach(id => conditionIds.add(id));
+      }
+      
+      if (conditionIds.size === 0) {
+        output += 'None found\n';
+      } else {
+        output += `Found ${conditionIds.size} unique condition IDs:\n`;
+        [...conditionIds].slice(0, 10).forEach(id => output += `  ${id}\n`);
+        if (conditionIds.size > 10) {
+          output += `  ... and ${conditionIds.size - 10} more\n`;
+        }
+      }
+      
+      results.innerHTML = output;
+    }
+    
+    function copyResults() {
+      const results = document.getElementById('results').innerText;
+      navigator.clipboard.writeText(results);
+      alert('Results copied to clipboard!');
+    }
+  </script>
+</body>
+</html>
+

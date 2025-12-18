@@ -66,9 +66,10 @@ export class MarketScanner {
     try {
       const question = raw.question || raw.title || '';
       const description = raw.description || '';
+      const slug = raw.market_slug || raw.slug || '';
       
-      // Check if this is a Bitcoin market
-      const isBitcoin = this.isBitcoinMarket(question, description);
+      // Check if this is a Bitcoin Up/Down market
+      const isBitcoin = this.isBitcoinMarket(question, description, slug);
       
       // Check if market is active and not closed
       const endDate = new Date(raw.endDateIso || raw.end_date_iso || raw.endDate);
@@ -121,10 +122,10 @@ export class MarketScanner {
   }
 
   /**
-   * Check if a market is related to Bitcoin based on keywords
+   * Check if a market is a Bitcoin Up/Down market
    */
-  private isBitcoinMarket(question: string, description: string): boolean {
-    const text = `${question} ${description}`.toLowerCase();
+  private isBitcoinMarket(question: string, description: string, slug?: string): boolean {
+    const text = `${question} ${description} ${slug || ''}`.toLowerCase();
     
     // Check for excluded keywords first
     for (const exclude of BITCOIN_MARKET_FILTER.excludeKeywords) {
@@ -133,32 +134,35 @@ export class MarketScanner {
       }
     }
     
-    // Check for Bitcoin keywords
+    // Check for Bitcoin Up/Down keywords
     for (const keyword of BITCOIN_MARKET_FILTER.keywords) {
       if (text.includes(keyword.toLowerCase())) {
         return true;
       }
     }
     
+    // Also check for the specific slug pattern used by Polymarket
+    if (slug && slug.includes('btc-updown')) {
+      return true;
+    }
+    
     return false;
   }
 
   /**
-   * Check if an outcome represents "yes" side (betting it will happen)
+   * Check if an outcome represents "up" (price going up)
    */
   private isUpOutcome(outcome: string): boolean {
     const text = outcome.toLowerCase().trim();
-    // Yes is the "up" side - betting the event happens
-    return text === 'yes' || text.includes('yes');
+    return text === 'up';
   }
 
   /**
-   * Check if an outcome represents "no" side (betting it won't happen)
+   * Check if an outcome represents "down" (price going down)
    */
   private isDownOutcome(outcome: string): boolean {
     const text = outcome.toLowerCase().trim();
-    // No is the "down" side - betting the event doesn't happen
-    return text === 'no' || text.includes('no');
+    return text === 'down';
   }
 
   /**

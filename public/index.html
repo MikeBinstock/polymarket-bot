@@ -487,7 +487,6 @@
       </div>
       <div class="auth-section">
         <input type="password" id="passwordInput" class="auth-input" placeholder="Enter password...">
-        <button id="loginBtn" class="btn btn-primary" style="padding: 10px 16px;">🔑 Login</button>
         <div id="botStatus" class="status-badge inactive">
           <span class="status-dot"></span>
           <span>Disconnected</span>
@@ -579,20 +578,11 @@
     passwordInput.value = password;
     if (password) fetchStats();
 
-    // Login function
-    function login() {
-      password = passwordInput.value;
+    // Event Listeners
+    passwordInput.addEventListener('input', (e) => {
+      password = e.target.value;
       localStorage.setItem('botPassword', password);
       fetchStats();
-    }
-
-    // Event Listeners
-    document.getElementById('loginBtn').addEventListener('click', login);
-    
-    passwordInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        login();
-      }
     });
 
     botToggle.addEventListener('click', toggleBot);

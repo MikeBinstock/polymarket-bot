@@ -710,16 +710,6 @@ export class PolymarketClient {
     const address = await this.wallet.getAddress();
     
     try {
-      // Try CLOB API first (if authenticated)
-      if (this.client && this.apiCreds) {
-        try {
-          const clobPositions = await this.client.getBalanceAllowance();
-          logger.info(`CLOB balance/allowance response:`, clobPositions);
-        } catch (clobErr) {
-          logger.debug(`CLOB positions not available: ${clobErr}`);
-        }
-      }
-      
       // Try data-api endpoint (public positions)
       const dataApiUrl = `https://data-api.polymarket.com/positions?user=${address.toLowerCase()}`;
       const response = await fetch(dataApiUrl);

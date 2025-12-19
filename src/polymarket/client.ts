@@ -371,23 +371,35 @@ export class PolymarketClient {
       }
 
       // Recalculate size based on new market price
-      // Use toFixed() to ensure EXACTLY 2 decimal places (Polymarket requirement)
-      // Then parseFloat to convert back to number
+      // CRITICAL: Polymarket requires EXACTLY 2 decimal places
+      // Use integer math to avoid ALL floating point issues
       const rawSize = (price * size) / marketPrice;
-      const adjustedSize = (Math.floor(rawSize * 100) / 100).toFixed(2);
+      const sizeInCents = Math.floor(rawSize * 100);  // Convert to cents (integer)
+      const finalSize = sizeInCents / 100;  // Back to dollars
       
-      // Ensure price is also EXACTLY 2 decimal places
-      const roundedPrice = parseFloat(marketPrice.toFixed(2));
+      const priceInCents = Math.round(marketPrice * 100);  // Convert to cents (integer)
+      const finalPrice = priceInCents / 100;  // Back to dollars
 
       logger.info(`Placing MARKET buy order: token=${tokenId.substring(0, 15)}...`);
-      logger.info(`  Price: ${roundedPrice} (2 decimals), Size: ${adjustedSize} (2 decimals)`);
+      logger.info(`  Price: ${finalPrice} (${priceInCents} cents), Size: ${finalSize} (${sizeInCents} cents)`);
 
-      // Create order at market price with properly rounded values
-      // Pass size as number parsed from fixed string to avoid floating point issues
+      // Verify decimals before sending
+      const priceStr = finalPrice.toString();
+      const sizeStr = finalSize.toString();
+      const priceDecimals = priceStr.includes('.') ? priceStr.split('.')[1]?.length || 0 : 0;
+      const sizeDecimals = sizeStr.includes('.') ? sizeStr.split('.')[1]?.length || 0 : 0;
+      logger.info(`  Decimal check: price has ${priceDecimals} decimals, size has ${sizeDecimals} decimals`);
+
+      if (priceDecimals > 2 || sizeDecimals > 2) {
+        logger.error(`TOO MANY DECIMALS! price=${priceStr}, size=${sizeStr}`);
+        throw new Error(`Decimal precision error: price=${priceStr}, size=${sizeStr}`);
+      }
+
+      // Create order at market price
       const order = await this.client.createOrder({
         tokenID: tokenId,
-        price: roundedPrice,
-        size: parseFloat(adjustedSize),
+        price: finalPrice,
+        size: finalSize,
         side: Side.BUY,
       });
 

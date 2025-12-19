@@ -757,15 +757,19 @@ export class PolymarketClient {
     
     logger.info(`=== Checking ${positions.length} positions for claimability ===`);
     
+    // Log FULL position data for first position to understand structure
+    if (positions.length > 0) {
+      logger.info(`FULL Position data sample: ${JSON.stringify(positions[0], null, 2)}`);
+    }
+    
     // Log each position for debugging
     positions.forEach((p: any, i: number) => {
       logger.info(`Position ${i + 1}:`);
-      logger.info(`  Market: ${p.market?.question || p.title || 'Unknown'}`);
-      logger.info(`  Size: ${p.size || p.amount || p.shares || 'N/A'}`);
-      logger.info(`  Resolved: market.resolved=${p.market?.resolved}, outcome.resolved=${p.outcome?.resolved}, resolved=${p.resolved}`);
-      logger.info(`  Winner: outcome.winner=${p.outcome?.winner}, won=${p.won}, outcome=${p.outcome?.name || p.outcome}`);
-      logger.info(`  Redeemable: ${p.redeemable}, Cashout: ${p.cashoutAmount}`);
-      logger.info(`  Raw data keys: ${Object.keys(p).join(', ')}`);
+      logger.info(`  Market: ${p.market?.question || p.title || p.marketTitle || 'Unknown'}`);
+      logger.info(`  Size: ${p.size || p.amount || p.shares || p.position || 'N/A'}`);
+      logger.info(`  Status fields: status=${p.status}, closed=${p.closed}, settled=${p.settled}, market.closed=${p.market?.closed}`);
+      logger.info(`  Winner fields: curPrice=${p.curPrice}, currentPrice=${p.currentPrice}, outcome=${p.outcome}`);
+      logger.info(`  All keys: ${Object.keys(p).join(', ')}`);
     });
     
     // Filter for resolved markets with positive balance

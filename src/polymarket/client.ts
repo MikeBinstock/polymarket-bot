@@ -755,15 +755,30 @@ export class PolymarketClient {
   async getClaimablePositions(): Promise<any[]> {
     const positions = await this.getPositions();
     
+    logger.info(`=== Checking ${positions.length} positions for claimability ===`);
+    
+    // Log each position for debugging
+    positions.forEach((p: any, i: number) => {
+      logger.info(`Position ${i + 1}:`);
+      logger.info(`  Market: ${p.market?.question || p.title || 'Unknown'}`);
+      logger.info(`  Size: ${p.size || p.amount || p.shares || 'N/A'}`);
+      logger.info(`  Resolved: market.resolved=${p.market?.resolved}, outcome.resolved=${p.outcome?.resolved}, resolved=${p.resolved}`);
+      logger.info(`  Winner: outcome.winner=${p.outcome?.winner}, won=${p.won}, outcome=${p.outcome?.name || p.outcome}`);
+      logger.info(`  Redeemable: ${p.redeemable}, Cashout: ${p.cashoutAmount}`);
+      logger.info(`  Raw data keys: ${Object.keys(p).join(', ')}`);
+    });
+    
     // Filter for resolved markets with positive balance
     const claimable = positions.filter((p: any) => {
-      const isResolved = p.market?.resolved || p.outcome?.resolved;
-      const hasBalance = parseFloat(p.size || p.amount || '0') > 0;
-      const isWinner = p.outcome?.winner || p.won;
+      const isResolved = p.market?.resolved || p.outcome?.resolved || p.resolved;
+      const hasBalance = parseFloat(p.size || p.amount || p.shares || '0') > 0;
+      const isWinner = p.outcome?.winner || p.won || p.redeemable;
+      
+      logger.info(`  → Claimable check: resolved=${isResolved}, hasBalance=${hasBalance}, isWinner=${isWinner}`);
       return isResolved && hasBalance && isWinner;
     });
 
-    logger.info(`Found ${claimable.length} claimable positions`);
+    logger.info(`Found ${claimable.length} claimable positions out of ${positions.length}`);
     return claimable;
   }
 

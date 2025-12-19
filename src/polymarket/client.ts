@@ -27,6 +27,20 @@ const ERC20_ABI = [
   'function balanceOf(address account) external view returns (uint256)'
 ];
 
+// CTF (Conditional Token Framework) contract for positions
+const CTF_CONTRACT = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045'; // Polymarket CTF
+const CTF_ABI = [
+  'function balanceOf(address owner, uint256 id) external view returns (uint256)',
+  'function balanceOfBatch(address[] owners, uint256[] ids) external view returns (uint256[])',
+  'function redeemPositions(address collateralToken, bytes32 parentCollectionId, bytes32 conditionId, uint256[] indexSets) external'
+];
+
+// NegRisk Adapter for redemption
+const NEG_RISK_ADAPTER = '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296';
+const NEG_RISK_ABI = [
+  'function redeemPositions(bytes32 conditionId, uint256[] amounts) external'
+];
+
 // Series IDs for recurring markets
 export const SERIES_IDS = {
   BTC_HOURLY: '10114',      // BTC Up or Down Hourly
@@ -651,6 +665,151 @@ export class PolymarketClient {
       },
       total: ethers.utils.formatUnits(totalBalance, 6),
     };
+  }
+
+  /**
+   * Get user's positions from Polymarket API
+   */
+  async getPositions(): Promise<any[]> {
+    if (!this.wallet) {
+      throw new Error('No wallet configured');
+    }
+
+    const address = await this.wallet.getAddress();
+    
+    try {
+      // Fetch from Gamma API (user positions endpoint)
+      const response = await fetch(`${GAMMA_API_URL}/positions?user=${address.toLowerCase()}`);
+      
+      if (!response.ok) {
+        logger.warn(`Failed to fetch positions from API: ${response.status}`);
+        return [];
+      }
+
+      const positions = await response.json() as any[];
+      logger.info(`Found ${positions.length} positions for ${address}`);
+      return positions;
+    } catch (error: any) {
+      logger.error(`Failed to fetch positions: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Get resolved markets that have claimable winnings
+   */
+  async getClaimablePositions(): Promise<any[]> {
+    const positions = await this.getPositions();
+    
+    // Filter for resolved markets with positive balance
+    const claimable = positions.filter((p: any) => {
+      const isResolved = p.market?.resolved || p.outcome?.resolved;
+      const hasBalance = parseFloat(p.size || p.amount || '0') > 0;
+      const isWinner = p.outcome?.winner || p.won;
+      return isResolved && hasBalance && isWinner;
+    });
+
+    logger.info(`Found ${claimable.length} claimable positions`);
+    return claimable;
+  }
+
+  /**
+   * Redeem a winning position
+   */
+  async redeemPosition(conditionId: string, isNegRisk: boolean = false): Promise<string> {
+    if (!this.wallet) {
+      throw new Error('No wallet configured');
+    }
+
+    logger.info(`=== Redeeming Position ===`);
+    logger.info(`Condition ID: ${conditionId}`);
+    logger.info(`Is Neg Risk market: ${isNegRisk}`);
+
+    // Connect to provider
+    let provider: ethers.providers.JsonRpcProvider | null = null;
+    for (const rpc of POLYGON_RPCS) {
+      try {
+        const testProvider = new ethers.providers.JsonRpcProvider(rpc);
+        await testProvider.getNetwork();
+        provider = testProvider;
+        break;
+      } catch {
+        continue;
+      }
+    }
+    if (!provider) throw new Error('All RPC endpoints failed');
+
+    const connectedWallet = this.wallet.connect(provider);
+
+    try {
+      let tx;
+      
+      if (isNegRisk) {
+        // Use Neg Risk Adapter for neg risk markets
+        const adapter = new ethers.Contract(NEG_RISK_ADAPTER, NEG_RISK_ABI, connectedWallet);
+        // For neg risk, we redeem with the amounts (simplified - redeem all)
+        tx = await adapter.redeemPositions(conditionId, [1, 1], { gasLimit: 300000 });
+      } else {
+        // Use CTF contract directly
+        const ctf = new ethers.Contract(CTF_CONTRACT, CTF_ABI, connectedWallet);
+        const parentCollectionId = ethers.constants.HashZero; // Root collection
+        // Index sets for binary outcome: [1, 2] means both outcomes
+        tx = await ctf.redeemPositions(
+          USDC_NATIVE_ADDRESS, // Collateral token
+          parentCollectionId,
+          conditionId,
+          [1, 2], // Both outcome indices
+          { gasLimit: 300000 }
+        );
+      }
+
+      logger.info(`Redeem tx sent: ${tx.hash}`);
+      logger.info(`View: https://polygonscan.com/tx/${tx.hash}`);
+      
+      const receipt = await tx.wait();
+      logger.info(`✅ Redemption confirmed! Block: ${receipt.blockNumber}`);
+      
+      return tx.hash;
+    } catch (error: any) {
+      logger.error(`Redemption failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Claim all available winnings
+   */
+  async claimAllWinnings(): Promise<{ success: number; failed: number; txHashes: string[] }> {
+    const claimable = await this.getClaimablePositions();
+    
+    if (claimable.length === 0) {
+      logger.info('No claimable positions found');
+      return { success: 0, failed: 0, txHashes: [] };
+    }
+
+    logger.info(`Attempting to claim ${claimable.length} positions...`);
+    
+    const results = { success: 0, failed: 0, txHashes: [] as string[] };
+    
+    for (const position of claimable) {
+      try {
+        const conditionId = position.market?.conditionId || position.conditionId;
+        const isNegRisk = position.market?.negRisk || false;
+        
+        const txHash = await this.redeemPosition(conditionId, isNegRisk);
+        results.success++;
+        results.txHashes.push(txHash);
+        
+        // Wait a bit between redemptions
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (error: any) {
+        logger.error(`Failed to claim position: ${error.message}`);
+        results.failed++;
+      }
+    }
+
+    logger.info(`Claim complete: ${results.success} succeeded, ${results.failed} failed`);
+    return results;
   }
 }
 

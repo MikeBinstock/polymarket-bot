@@ -238,6 +238,69 @@ export function createServer(
     }
   });
 
+  // Get user's positions
+  app.get('/api/positions', async (req: Request, res: Response) => {
+    try {
+      const client = (scheduler as any).client as import('../polymarket/client').PolymarketClient;
+      
+      if (client.isReadOnly()) {
+        res.status(400).json({ success: false, error: 'No wallet configured' });
+        return;
+      }
+
+      const positions = await client.getPositions();
+      res.json({ success: true, data: positions });
+    } catch (error: any) {
+      logger.error('Failed to get positions', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to get positions' });
+    }
+  });
+
+  // Get claimable (winning) positions
+  app.get('/api/positions/claimable', async (req: Request, res: Response) => {
+    try {
+      const client = (scheduler as any).client as import('../polymarket/client').PolymarketClient;
+      
+      if (client.isReadOnly()) {
+        res.status(400).json({ success: false, error: 'No wallet configured' });
+        return;
+      }
+
+      const claimable = await client.getClaimablePositions();
+      res.json({ success: true, data: claimable });
+    } catch (error: any) {
+      logger.error('Failed to get claimable positions', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to get claimable positions' });
+    }
+  });
+
+  // Claim all winnings
+  app.post('/api/positions/claim', async (req: Request, res: Response) => {
+    try {
+      const client = (scheduler as any).client as import('../polymarket/client').PolymarketClient;
+      
+      if (client.isReadOnly()) {
+        res.status(400).json({ success: false, error: 'No wallet configured' });
+        return;
+      }
+
+      logger.info('Starting claim all winnings...');
+      
+      // Run in background
+      client.claimAllWinnings()
+        .then((result) => logger.info(`✅ Claim complete: ${result.success} succeeded, ${result.failed} failed`))
+        .catch((err: any) => logger.error('❌ Claim failed:', err.message || err));
+      
+      res.json({ 
+        success: true, 
+        message: 'Claim started! Check Railway logs for progress.' 
+      });
+    } catch (error: any) {
+      logger.error('Failed to start claim', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to start claim' });
+    }
+  });
+
   // Get trades
   app.get('/api/trades', (req: Request, res: Response) => {
     try {

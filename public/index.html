@@ -598,6 +598,156 @@
       background: rgba(136, 136, 160, 0.1);
       color: var(--text-secondary);
     }
+
+    /* Positions */
+    .positions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .position-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      transition: all 0.2s;
+    }
+
+    .position-card.claimable {
+      border-color: var(--success);
+      background: rgba(0, 221, 136, 0.08);
+    }
+
+    .position-card.pending {
+      border-color: var(--warning);
+    }
+
+    .position-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .position-market {
+      font-size: 0.85rem;
+      font-weight: 600;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .position-outcome {
+      display: inline-flex;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .position-outcome.up {
+      background: rgba(0, 221, 136, 0.1);
+      color: var(--success);
+    }
+
+    .position-outcome.down {
+      background: rgba(255, 68, 102, 0.1);
+      color: var(--danger);
+    }
+
+    .position-details {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .position-detail {
+      font-size: 0.8rem;
+    }
+
+    .position-detail-label {
+      color: var(--text-secondary);
+      margin-bottom: 2px;
+    }
+
+    .position-detail-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
+    .claimable-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: var(--success);
+      color: var(--bg-primary);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .claimable-badge:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 221, 136, 0.3);
+    }
+
+    .position-status {
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    .position-status.open {
+      background: rgba(0, 212, 170, 0.1);
+      color: var(--accent-primary);
+    }
+
+    .position-status.resolved {
+      background: rgba(0, 221, 136, 0.1);
+      color: var(--success);
+    }
+
+    .position-status.lost {
+      background: rgba(255, 68, 102, 0.1);
+      color: var(--danger);
+    }
+
+    .positions-summary {
+      display: flex;
+      gap: 24px;
+      padding: 16px;
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      margin-bottom: 16px;
+    }
+
+    .summary-item {
+      text-align: center;
+    }
+
+    .summary-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .summary-value.claimable {
+      color: var(--success);
+    }
+
+    .summary-label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
   </style>
 </head>
 <body>
@@ -687,6 +837,23 @@
       </div>
     </div>
 
+    <!-- Positions & Winnings -->
+    <div class="card" style="margin-bottom: 24px;">
+      <div class="card-header">
+        <h2 class="card-title">💰 Positions & Winnings</h2>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary" id="refreshPositionsBtn">🔄 Refresh</button>
+          <button class="btn btn-primary" id="claimAllBtn">💵 Claim All Winnings</button>
+        </div>
+      </div>
+      <div id="positionsContainer">
+        <div class="empty-state">
+          <div class="empty-state-icon">💼</div>
+          <p>No positions yet. Positions will appear here once trades are made.</p>
+        </div>
+      </div>
+    </div>
+
     <!-- Trades Table -->
     <div class="card">
       <div class="card-header">
@@ -738,6 +905,8 @@
     document.getElementById('approveBtn').addEventListener('click', approveUsdc);
     document.getElementById('refreshTradesBtn').addEventListener('click', () => fetchStats());
     document.getElementById('refreshMarketsBtn').addEventListener('click', fetchLiveMarkets);
+    document.getElementById('refreshPositionsBtn').addEventListener('click', fetchPositions);
+    document.getElementById('claimAllBtn').addEventListener('click', claimAllWinnings);
 
     // API Functions
     async function apiCall(endpoint, method = 'GET', body = null) {
@@ -774,8 +943,9 @@
       try {
         const { data } = await apiCall('/stats');
         updateDashboard(data);
-        // Also fetch live markets
+        // Also fetch live markets and positions
         fetchLiveMarkets();
+        fetchPositions();
       } catch (error) {
         console.error('Failed to fetch stats:', error);
       }
@@ -787,6 +957,47 @@
         renderLiveMarkets(data);
       } catch (error) {
         console.error('Failed to fetch live markets:', error);
+      }
+    }
+
+    async function fetchPositions() {
+      try {
+        const btn = document.getElementById('refreshPositionsBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div>';
+        
+        const { data } = await apiCall('/positions');
+        renderPositions(data);
+      } catch (error) {
+        console.error('Failed to fetch positions:', error);
+        // Show empty state on error
+        renderPositions([]);
+      } finally {
+        const btn = document.getElementById('refreshPositionsBtn');
+        btn.disabled = false;
+        btn.innerHTML = '🔄 Refresh';
+      }
+    }
+
+    async function claimAllWinnings() {
+      if (!confirm('Claim all available winnings? This will send transactions to the blockchain.')) return;
+      
+      try {
+        const btn = document.getElementById('claimAllBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Claiming...';
+        
+        await apiCall('/positions/claim', 'POST');
+        showToast('Claim started! Check Railway logs for progress.', 'success');
+        
+        // Refresh positions after a delay
+        setTimeout(fetchPositions, 5000);
+      } catch (error) {
+        showToast('Failed to claim: ' + error.message, 'error');
+      } finally {
+        const btn = document.getElementById('claimAllBtn');
+        btn.disabled = false;
+        btn.innerHTML = '💵 Claim All Winnings';
       }
     }
 
@@ -983,6 +1194,96 @@
               </div>
             </div>
           `).join('')}
+        </div>
+      `;
+    }
+
+    function renderPositions(positions) {
+      const container = document.getElementById('positionsContainer');
+      
+      if (!positions || positions.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">💼</div>
+            <p>No positions found. Make some trades first, or the API may not have position data available.</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Calculate summary stats
+      const totalPositions = positions.length;
+      const claimable = positions.filter(p => p.won || (p.market?.resolved && p.outcome?.winner));
+      const totalClaimable = claimable.reduce((sum, p) => sum + parseFloat(p.size || p.amount || 0), 0);
+      const openPositions = positions.filter(p => !p.market?.resolved);
+
+      container.innerHTML = `
+        <div class="positions-summary">
+          <div class="summary-item">
+            <div class="summary-value">${totalPositions}</div>
+            <div class="summary-label">Total Positions</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-value">${openPositions.length}</div>
+            <div class="summary-label">Open</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-value claimable">${claimable.length}</div>
+            <div class="summary-label">Claimable</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-value claimable">$${totalClaimable.toFixed(2)}</div>
+            <div class="summary-label">Total Winnings</div>
+          </div>
+        </div>
+        <div class="positions-grid">
+          ${positions.map(p => {
+            const isClaimable = p.won || (p.market?.resolved && p.outcome?.winner);
+            const isOpen = !p.market?.resolved;
+            const isLost = p.market?.resolved && !isClaimable;
+            const outcome = p.outcome?.name || p.side || 'Unknown';
+            const isUp = outcome.toLowerCase().includes('up') || outcome.toLowerCase().includes('yes');
+            const size = parseFloat(p.size || p.amount || 0);
+            const avgPrice = parseFloat(p.avgPrice || p.price || 0);
+            const marketTitle = p.market?.question || p.title || 'Unknown Market';
+            
+            return `
+              <div class="position-card ${isClaimable ? 'claimable' : ''} ${isOpen ? 'pending' : ''}">
+                <div class="position-header">
+                  <div class="position-market" title="${marketTitle}">${marketTitle}</div>
+                  <span class="position-outcome ${isUp ? 'up' : 'down'}">${outcome}</span>
+                </div>
+                <div class="position-details">
+                  <div class="position-detail">
+                    <div class="position-detail-label">Size</div>
+                    <div class="position-detail-value">${size.toFixed(2)} shares</div>
+                  </div>
+                  <div class="position-detail">
+                    <div class="position-detail-label">Avg Price</div>
+                    <div class="position-detail-value">${(avgPrice * 100).toFixed(1)}¢</div>
+                  </div>
+                  <div class="position-detail">
+                    <div class="position-detail-label">Cost</div>
+                    <div class="position-detail-value">$${(size * avgPrice).toFixed(2)}</div>
+                  </div>
+                  <div class="position-detail">
+                    <div class="position-detail-label">Value</div>
+                    <div class="position-detail-value" style="color: ${isClaimable ? 'var(--success)' : 'inherit'}">
+                      ${isClaimable ? '$' + size.toFixed(2) : isOpen ? '?' : '$0.00'}
+                    </div>
+                  </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  ${isClaimable 
+                    ? '<span class="claimable-badge">💵 Claimable</span>' 
+                    : isOpen 
+                      ? '<span class="position-status open">⏳ Open</span>'
+                      : '<span class="position-status lost">❌ Lost</span>'
+                  }
+                </div>
+              </div>
+            `;
+          }).join('')}
         </div>
       `;
     }

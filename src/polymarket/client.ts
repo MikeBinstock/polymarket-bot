@@ -371,19 +371,23 @@ export class PolymarketClient {
       }
 
       // Recalculate size based on new market price
-      // Round DOWN to 2 decimal places (Polymarket max precision for maker amount)
-      const adjustedSize = Math.floor((price * size) / marketPrice * 100) / 100;
+      // Use toFixed() to ensure EXACTLY 2 decimal places (Polymarket requirement)
+      // Then parseFloat to convert back to number
+      const rawSize = (price * size) / marketPrice;
+      const adjustedSize = (Math.floor(rawSize * 100) / 100).toFixed(2);
       
-      // Ensure price is also rounded to 2 decimal places
-      const roundedPrice = Math.round(marketPrice * 100) / 100;
+      // Ensure price is also EXACTLY 2 decimal places
+      const roundedPrice = parseFloat(marketPrice.toFixed(2));
 
-      logger.info(`Placing MARKET buy order: token=${tokenId.substring(0, 15)}..., price=${roundedPrice}, size=${adjustedSize}`);
+      logger.info(`Placing MARKET buy order: token=${tokenId.substring(0, 15)}...`);
+      logger.info(`  Price: ${roundedPrice} (2 decimals), Size: ${adjustedSize} (2 decimals)`);
 
       // Create order at market price with properly rounded values
+      // Pass size as number parsed from fixed string to avoid floating point issues
       const order = await this.client.createOrder({
         tokenID: tokenId,
         price: roundedPrice,
-        size: adjustedSize,
+        size: parseFloat(adjustedSize),
         side: Side.BUY,
       });
 

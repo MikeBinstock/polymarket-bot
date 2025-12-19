@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { ClobClient, Side, ApiKeyCreds } from '@polymarket/clob-client';
+import { ClobClient, Side, ApiKeyCreds, OrderType } from '@polymarket/clob-client';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('PolymarketClient');
@@ -352,16 +352,39 @@ export class PolymarketClient {
         throw new Error('Client not initialized');
       }
 
-      logger.info(`Placing buy order: token=${tokenId}, price=${price}, size=${size}`);
+      // Get the best ask price from order book for market order
+      const orderBook = await this.client.getOrderBook(tokenId);
+      let marketPrice = price;
+      
+      if (orderBook.asks && orderBook.asks.length > 0) {
+        // Find the best (lowest) ask price
+        const askPrices = orderBook.asks.map((a: any) => parseFloat(a.price));
+        const bestAsk = Math.min(...askPrices);
+        
+        // Use the best ask price + small buffer to ensure fill
+        // Round to 2 decimal places (Polymarket tick size)
+        marketPrice = Math.min(Math.ceil((bestAsk + 0.01) * 100) / 100, 0.99);
+        
+        logger.info(`📊 Order book: Best ask=${bestAsk.toFixed(3)}, using market price=${marketPrice.toFixed(3)}`);
+      } else {
+        logger.warn(`No asks in order book, using original price: ${price}`);
+      }
 
+      // Recalculate size based on new market price
+      const adjustedSize = Math.floor((price * size) / marketPrice * 100) / 100;
+
+      logger.info(`Placing MARKET buy order: token=${tokenId.substring(0, 15)}..., price=${marketPrice}, size=${adjustedSize.toFixed(2)}`);
+
+      // Create order at market price
       const order = await this.client.createOrder({
         tokenID: tokenId,
-        price: price,
-        size: size,
+        price: marketPrice,
+        size: adjustedSize,
         side: Side.BUY,
       });
 
-      const response = await this.client.postOrder(order);
+      // Post with FOK (Fill or Kill) order type for immediate execution
+      const response = await this.client.postOrder(order, OrderType.FOK);
       
       // Check if response contains an error
       if (response && response.error) {
@@ -376,7 +399,8 @@ export class PolymarketClient {
         throw new Error('Order failed: No order ID returned');
       }
       
-      logger.info(`Order placed successfully - ID: ${response.orderID || response.id}`);
+      logger.info(`✅ MARKET ORDER FILLED - ID: ${response.orderID || response.id}`);
+      logger.info(`Order response:`, JSON.stringify(response));
       return response;
     } catch (error: any) {
       // Parse error message for better logging

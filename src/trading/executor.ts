@@ -132,11 +132,26 @@ export class TradeExecutor {
       const opportunity = opportunities[i];
       logger.info(`Processing opportunity ${i + 1}/${opportunities.length}: ${opportunity.market.question} (${opportunity.side.toUpperCase()})`);
       
-      // Check if we already have an open trade for this market
-      const existingTrade = this.db.getTradeByMarketId(opportunity.market.condition_id);
-      if (existingTrade && ['pending', 'open', 'partial'].includes(existingTrade.status)) {
-        logger.info(`Skipping market ${opportunity.market.condition_id} - already have open trade (${existingTrade.id})`);
+      // Check if we already have an open trade for this SIDE of the market
+      // Allow buying the opposite side if it also hits 70¢
+      const existingTrades = this.db.getTradesByMarketId(opportunity.market.condition_id);
+      const existingTradeOnSameSide = existingTrades.find(t => 
+        ['pending', 'open', 'partial'].includes(t.status) && 
+        t.side?.toLowerCase() === opportunity.side.toLowerCase()
+      );
+      
+      if (existingTradeOnSameSide) {
+        logger.info(`Skipping ${opportunity.side.toUpperCase()} on ${opportunity.market.condition_id} - already have open ${opportunity.side.toUpperCase()} trade (${existingTradeOnSameSide.id})`);
         continue;
+      }
+      
+      // Log if we're buying the opposite side
+      const existingOppositeTrade = existingTrades.find(t => 
+        ['pending', 'open', 'partial'].includes(t.status) && 
+        t.side?.toLowerCase() !== opportunity.side.toLowerCase()
+      );
+      if (existingOppositeTrade) {
+        logger.info(`📊 Buying opposite side! Already have ${existingOppositeTrade.side?.toUpperCase()}, now buying ${opportunity.side.toUpperCase()}`);
       }
 
       try {

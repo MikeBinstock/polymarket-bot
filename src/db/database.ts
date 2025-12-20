@@ -178,6 +178,15 @@ export class TradeDatabase {
     return stmt.get(marketId) as Trade | null;
   }
 
+  getTradesByMarketId(marketId: string): Trade[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM trades 
+      WHERE market_id = ? 
+      ORDER BY created_at DESC
+    `);
+    return stmt.all(marketId) as Trade[];
+  }
+
   getTradesByStatus(status: TradeStatus): Trade[] {
     const stmt = this.db.prepare('SELECT * FROM trades WHERE status = ? ORDER BY created_at DESC');
     return stmt.all(status) as Trade[];

@@ -1085,6 +1085,183 @@
       color: var(--accent-primary);
       font-weight: 600;
     }
+
+    /* Main Tab Navigation */
+    .main-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 24px;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      padding: 4px;
+    }
+
+    .main-tab {
+      flex: 1;
+      padding: 14px 24px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .main-tab:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+
+    .main-tab.active {
+      background: var(--accent-primary);
+      color: var(--bg-primary);
+    }
+
+    .main-tab .tab-icon {
+      font-size: 1.2rem;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* Weather-specific styles */
+    .weather-city-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .city-card {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid var(--border);
+    }
+
+    .city-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .city-name {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .city-temp {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent-primary);
+    }
+
+    .city-forecast {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .city-confidence {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .city-confidence.very_high { background: rgba(0, 221, 136, 0.2); color: var(--success); }
+    .city-confidence.high { background: rgba(0, 212, 170, 0.2); color: var(--accent-primary); }
+    .city-confidence.medium { background: rgba(255, 170, 0, 0.2); color: var(--warning); }
+    .city-confidence.low { background: rgba(255, 68, 102, 0.2); color: var(--danger); }
+
+    .opportunity-card {
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 16px;
+      border: 2px solid var(--success);
+      margin-bottom: 12px;
+    }
+
+    .opportunity-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .opportunity-city {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .opportunity-edge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--success);
+    }
+
+    .opportunity-details {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .opportunity-detail {
+      text-align: center;
+    }
+
+    .opportunity-detail-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .opportunity-detail-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
+    .opportunity-action {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .action-badge {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+
+    .action-badge.buy-yes {
+      background: rgba(0, 221, 136, 0.2);
+      color: var(--success);
+    }
+
+    .action-badge.buy-no {
+      background: rgba(255, 68, 102, 0.2);
+      color: var(--danger);
+    }
   </style>
 </head>
 <body>
@@ -1092,10 +1269,10 @@
     <!-- Header -->
     <header class="header">
       <div class="logo">
-        <div class="logo-icon">₿</div>
+        <div class="logo-icon">📊</div>
         <div class="logo-text">
-          <h1>70¢ Strategy</h1>
-          <span>Buy Expensive Options</span>
+          <h1>Polymarket Bot</h1>
+          <span>Automated Trading</span>
         </div>
       </div>
       <div class="auth-section">
@@ -1109,6 +1286,21 @@
         </div>
       </div>
     </header>
+
+    <!-- Main Tab Navigation -->
+    <div class="main-tabs">
+      <button class="main-tab active" data-tab="btc">
+        <span class="tab-icon">₿</span>
+        <span>BTC 70¢ Strategy</span>
+      </button>
+      <button class="main-tab" data-tab="weather">
+        <span class="tab-icon">🌤️</span>
+        <span>Weather Bot</span>
+      </button>
+    </div>
+
+    <!-- BTC Bot Tab Panel -->
+    <div id="btc-panel" class="tab-panel active">
 
     <!-- Stats Grid -->
     <div class="grid grid-4" style="margin-bottom: 24px;">
@@ -1335,6 +1527,109 @@
         </div>
       </div>
     </div>
+
+    </div><!-- End BTC Panel -->
+
+    <!-- Weather Bot Tab Panel -->
+    <div id="weather-panel" class="tab-panel">
+      
+      <!-- Weather Stats Grid -->
+      <div class="grid grid-4" style="margin-bottom: 24px;">
+        <div class="card stat-card">
+          <span class="stat-icon">🎯</span>
+          <div class="stat-value" id="weatherOpportunities">0</div>
+          <div class="stat-label">Opportunities</div>
+        </div>
+        <div class="card stat-card">
+          <span class="stat-icon">🌡️</span>
+          <div class="stat-value" id="weatherMarkets">0</div>
+          <div class="stat-label">Markets Found</div>
+        </div>
+        <div class="card stat-card">
+          <span class="stat-icon">📈</span>
+          <div class="stat-value" id="weatherTopEdge">--</div>
+          <div class="stat-label">Top Edge</div>
+        </div>
+        <div class="card stat-card">
+          <span class="stat-icon">⏱️</span>
+          <div class="stat-value" id="weatherLastScan">--</div>
+          <div class="stat-label">Last Scan</div>
+        </div>
+      </div>
+
+      <!-- Weather Controls -->
+      <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header">
+          <h2 class="card-title">🌤️ Weather Bot Controls</h2>
+        </div>
+        <div class="control-panel">
+          <div class="toggle-container">
+            <div id="weatherToggle" class="toggle"></div>
+            <span class="toggle-label" id="weatherToggleLabel">Bot Disabled</span>
+          </div>
+          <div class="control-group">
+            <label class="control-label">Min Edge %</label>
+            <input type="number" id="weatherMinEdge" class="control-input" min="5" max="50" step="1" value="15">
+          </div>
+          <div class="control-group">
+            <label class="control-label">Max Trade $</label>
+            <input type="number" id="weatherMaxTrade" class="control-input" min="1" max="500" step="1" value="50">
+          </div>
+          <button class="btn btn-secondary" id="weatherSaveConfig">💾 Save</button>
+          <button class="btn btn-primary" id="weatherScanBtn">🔍 Scan Now</button>
+        </div>
+      </div>
+
+      <!-- Weather Opportunities -->
+      <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header">
+          <h2 class="card-title">🎯 Opportunities</h2>
+          <button class="btn btn-secondary" id="refreshWeatherOpps">🔄 Refresh</button>
+        </div>
+        <div id="weatherOpportunitiesContainer">
+          <div class="empty-state">
+            <div class="empty-state-icon">🌤️</div>
+            <p>No opportunities yet. Click "Scan Now" to find temperature markets with edge.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- City Forecasts -->
+      <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header">
+          <h2 class="card-title">🌡️ City Forecasts (NWS)</h2>
+        </div>
+        <div id="cityForecastsContainer" class="weather-city-grid">
+          <div class="empty-state" style="grid-column: 1 / -1;">
+            <div class="empty-state-icon">🏙️</div>
+            <p>Run a scan to see NWS forecasts for tracked cities.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- How It Works -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">📚 How Weather Bot Works</h2>
+        </div>
+        <div style="padding: 16px; color: var(--text-secondary); line-height: 1.6;">
+          <p><strong>Edge Thesis:</strong> Polymarket offers daily high temperature markets. The bot compares NWS (National Weather Service) forecasts to market prices.</p>
+          <br>
+          <p><strong>NWS Accuracy:</strong></p>
+          <ul style="margin-left: 20px; margin-top: 8px;">
+            <li>0-24 hours: ±2°F ~80% of the time</li>
+            <li>24-48 hours: ±3°F ~90% of the time</li>
+            <li>48-72 hours: ±5°F ~95% of the time</li>
+          </ul>
+          <br>
+          <p><strong>Example:</strong> If NWS predicts 85°F with high confidence and Polymarket prices the 85-86°F bucket at 60¢, but the true probability is ~75%, that's 15% edge.</p>
+          <br>
+          <p><strong>Tracked Cities:</strong> NYC, LA, Chicago, Miami, Dallas, Seattle</p>
+        </div>
+      </div>
+
+    </div><!-- End Weather Panel -->
+
   </div>
 
   <!-- Toast Container -->
@@ -1379,6 +1674,17 @@
     document.getElementById('exportCsvBtn').addEventListener('click', exportTradesToCsv);
     document.getElementById('cashOutBtn').addEventListener('click', cashOutAll);
     document.getElementById('approveSellBtn').addEventListener('click', approveSelling);
+    
+    // Tab switching
+    document.querySelectorAll('.main-tab').forEach(tab => {
+      tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+    });
+    
+    // Weather bot controls
+    document.getElementById('weatherToggle').addEventListener('click', toggleWeatherBot);
+    document.getElementById('weatherScanBtn').addEventListener('click', scanWeather);
+    document.getElementById('weatherSaveConfig').addEventListener('click', saveWeatherConfig);
+    document.getElementById('refreshWeatherOpps').addEventListener('click', fetchWeatherOpportunities);
     
     // Update trading window status every second
     setInterval(updateTradingWindow, 1000);
@@ -2055,6 +2361,226 @@
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
       }, 3000);
+    }
+
+    // ============================================
+    // TAB SWITCHING
+    // ============================================
+    
+    function switchTab(tabId) {
+      // Update tab buttons
+      document.querySelectorAll('.main-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.tab === tabId);
+      });
+      
+      // Update tab panels
+      document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.id === `${tabId}-panel`);
+      });
+      
+      // Fetch data for the active tab
+      if (tabId === 'weather') {
+        fetchWeatherStatus();
+      }
+    }
+
+    // ============================================
+    // WEATHER BOT FUNCTIONS
+    // ============================================
+    
+    let weatherEnabled = false;
+
+    async function fetchWeatherStatus() {
+      try {
+        const { data } = await apiCall('/weather/status');
+        updateWeatherStatus(data);
+      } catch (error) {
+        console.error('Failed to fetch weather status:', error);
+      }
+    }
+
+    async function fetchWeatherOpportunities() {
+      try {
+        const { data } = await apiCall('/weather/opportunities');
+        renderWeatherOpportunities(data);
+      } catch (error) {
+        console.error('Failed to fetch weather opportunities:', error);
+      }
+    }
+
+    async function scanWeather() {
+      try {
+        const btn = document.getElementById('weatherScanBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Scanning...';
+        
+        const { data, message } = await apiCall('/weather/scan', 'POST');
+        showToast(message || 'Weather scan complete!', 'success');
+        
+        updateWeatherScanResult(data);
+        renderWeatherOpportunities(data.opportunities || []);
+        renderCityForecasts(data.forecasts || {});
+      } catch (error) {
+        showToast('Weather scan failed: ' + error.message, 'error');
+      } finally {
+        const btn = document.getElementById('weatherScanBtn');
+        btn.disabled = false;
+        btn.innerHTML = '🔍 Scan Now';
+      }
+    }
+
+    async function toggleWeatherBot() {
+      try {
+        const { data } = await apiCall('/weather/toggle', 'POST');
+        weatherEnabled = data.enabled;
+        updateWeatherToggle(data.enabled);
+        showToast(data.enabled ? 'Weather bot enabled' : 'Weather bot disabled', 'success');
+      } catch (error) {
+        showToast('Failed to toggle weather bot', 'error');
+      }
+    }
+
+    async function saveWeatherConfig() {
+      try {
+        await apiCall('/weather/settings', 'POST', {
+          minEdgeForTrade: parseFloat(document.getElementById('weatherMinEdge').value) / 100,
+          maxTradeSize: parseFloat(document.getElementById('weatherMaxTrade').value),
+        });
+        showToast('Weather settings saved', 'success');
+      } catch (error) {
+        showToast('Failed to save settings', 'error');
+      }
+    }
+
+    function updateWeatherStatus(status) {
+      weatherEnabled = status.enabled;
+      updateWeatherToggle(status.enabled);
+      
+      document.getElementById('weatherOpportunities').textContent = status.opportunityCount || 0;
+      document.getElementById('weatherLastScan').textContent = status.lastScanTime 
+        ? formatTime(status.lastScanTime) 
+        : '--';
+      
+      if (status.minEdgeForTrade) {
+        document.getElementById('weatherMinEdge').value = Math.round(status.minEdgeForTrade * 100);
+      }
+      if (status.maxTradeSize) {
+        document.getElementById('weatherMaxTrade').value = status.maxTradeSize;
+      }
+    }
+
+    function updateWeatherToggle(enabled) {
+      const toggle = document.getElementById('weatherToggle');
+      const label = document.getElementById('weatherToggleLabel');
+      toggle.className = `toggle ${enabled ? 'active' : ''}`;
+      label.textContent = enabled ? 'Bot Enabled' : 'Bot Disabled';
+    }
+
+    function updateWeatherScanResult(data) {
+      document.getElementById('weatherMarkets').textContent = data.markets?.length || 0;
+      document.getElementById('weatherOpportunities').textContent = data.opportunities?.length || 0;
+      document.getElementById('weatherLastScan').textContent = data.scannedAt 
+        ? formatTime(data.scannedAt) 
+        : '--';
+      
+      // Update top edge
+      if (data.opportunities && data.opportunities.length > 0) {
+        const topEdge = Math.max(...data.opportunities.map(o => o.edge));
+        document.getElementById('weatherTopEdge').textContent = `${(topEdge * 100).toFixed(1)}%`;
+      } else {
+        document.getElementById('weatherTopEdge').textContent = '--';
+      }
+    }
+
+    function renderWeatherOpportunities(opportunities) {
+      const container = document.getElementById('weatherOpportunitiesContainer');
+      
+      if (!opportunities || opportunities.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🌤️</div>
+            <p>No opportunities found. Run a scan or check back later.</p>
+          </div>
+        `;
+        return;
+      }
+
+      const html = opportunities.map(opp => `
+        <div class="opportunity-card">
+          <div class="opportunity-header">
+            <div class="opportunity-city">
+              <span style="font-size: 1.2rem; margin-right: 8px;">🌡️</span>
+              ${opp.city} - ${opp.bucket.label}
+            </div>
+            <div class="opportunity-edge">+${(opp.edge * 100).toFixed(1)}%</div>
+          </div>
+          <div class="opportunity-details">
+            <div class="opportunity-detail">
+              <div class="opportunity-detail-label">NWS Forecast</div>
+              <div class="opportunity-detail-value">${opp.nwsForecastHigh}°F</div>
+            </div>
+            <div class="opportunity-detail">
+              <div class="opportunity-detail-label">Market Price</div>
+              <div class="opportunity-detail-value">${(opp.marketPrice * 100).toFixed(1)}¢</div>
+            </div>
+            <div class="opportunity-detail">
+              <div class="opportunity-detail-label">True Prob</div>
+              <div class="opportunity-detail-value">${(opp.estimatedTrueProb * 100).toFixed(1)}%</div>
+            </div>
+          </div>
+          <div class="opportunity-action">
+            <div>
+              <span class="city-confidence ${opp.nwsConfidence}">${opp.nwsConfidence.replace('_', ' ')}</span>
+              <span style="margin-left: 8px; color: var(--text-muted);">${opp.hoursUntil}h until settlement</span>
+            </div>
+            <span class="action-badge ${opp.action === 'BUY_YES' ? 'buy-yes' : 'buy-no'}">${opp.action.replace('_', ' ')}</span>
+          </div>
+        </div>
+      `).join('');
+
+      container.innerHTML = html;
+    }
+
+    function renderCityForecasts(forecasts) {
+      const container = document.getElementById('cityForecastsContainer');
+      
+      if (!forecasts || Object.keys(forecasts).length === 0) {
+        container.innerHTML = `
+          <div class="empty-state" style="grid-column: 1 / -1;">
+            <div class="empty-state-icon">🏙️</div>
+            <p>No forecasts available. Run a scan to fetch NWS data.</p>
+          </div>
+        `;
+        return;
+      }
+
+      const html = Object.entries(forecasts).map(([cityCode, forecast]) => `
+        <div class="city-card">
+          <div class="city-header">
+            <div class="city-name">${getCityName(cityCode)}</div>
+            <div class="city-temp">${forecast.highTemp}°F</div>
+          </div>
+          <div class="city-forecast">${forecast.shortForecast}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="city-confidence ${forecast.confidence}">${forecast.confidence.replace('_', ' ')}</span>
+            <span style="color: var(--text-muted); font-size: 0.8rem;">${forecast.hoursUntil}h out</span>
+          </div>
+        </div>
+      `).join('');
+
+      container.innerHTML = html;
+    }
+
+    function getCityName(code) {
+      const names = {
+        NYC: 'New York City',
+        LA: 'Los Angeles',
+        Chicago: 'Chicago',
+        Miami: 'Miami',
+        Dallas: 'Dallas',
+        Seattle: 'Seattle'
+      };
+      return names[code] || code;
     }
 
     // Auto-refresh every 30 seconds

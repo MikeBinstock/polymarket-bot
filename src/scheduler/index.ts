@@ -34,8 +34,8 @@ export class TradingScheduler {
   private executor: TradeExecutor;
   private autoClaimEnabled = true;
   
-  // Trading window: only trade in last 15 minutes of hour (minutes 45-59)
-  private tradingWindowStart = 45;  // Minute 45
+  // Trading window: only trade in last 30 minutes of hour (minutes 30-59)
+  private tradingWindowStart = 30;  // Minute 30
   private tradingWindowEnd = 59;    // Minute 59
 
   constructor(
@@ -52,7 +52,7 @@ export class TradingScheduler {
   }
 
   /**
-   * Check if current time is within the trading window (last 15 minutes of hour)
+   * Check if current time is within the trading window (last 30 minutes of hour)
    */
   isInTradingWindow(): boolean {
     const now = new Date();
@@ -236,7 +236,7 @@ export class TradingScheduler {
       const opportunities = this.calculator.findSingleLegOpportunities(hourlyMarkets);
       logger.info(`Found ${opportunities.length} markets with expensive side (≥70¢)`);
 
-      // Execute trades - ONLY in trading window (last 15 minutes of hour)
+      // Execute trades - ONLY in trading window (last 30 minutes of hour)
       let tradesExecuted = 0;
       const inTradingWindow = this.isInTradingWindow();
       const currentMinute = new Date().getMinutes();

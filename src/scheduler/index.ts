@@ -33,6 +33,10 @@ export class TradingScheduler {
   private calculator: StraddleCalculator;
   private executor: TradeExecutor;
   private autoClaimEnabled = true;
+  
+  // Trading window: only trade in last 15 minutes of hour (minutes 45-59)
+  private tradingWindowStart = 45;  // Minute 45
+  private tradingWindowEnd = 59;    // Minute 59
 
   constructor(
     private client: PolymarketClient,
@@ -48,15 +52,38 @@ export class TradingScheduler {
   }
 
   /**
-   * Start the scheduler (runs every 5 minutes by default)
+   * Check if current time is within the trading window (last 15 minutes of hour)
    */
-  start(cronExpression: string = '*/5 * * * *'): void {
+  isInTradingWindow(): boolean {
+    const now = new Date();
+    const minute = now.getMinutes();
+    return minute >= this.tradingWindowStart && minute <= this.tradingWindowEnd;
+  }
+
+  /**
+   * Get minutes until trading window opens
+   */
+  getMinutesUntilTradingWindow(): number {
+    const now = new Date();
+    const minute = now.getMinutes();
+    if (minute >= this.tradingWindowStart) {
+      return 0; // Already in window
+    }
+    return this.tradingWindowStart - minute;
+  }
+
+  /**
+   * Start the scheduler (runs every 30 seconds by default)
+   * Note: 6-field cron format for seconds: seconds minutes hours day month weekday
+   */
+  start(cronExpression: string = '*/30 * * * * *'): void {
     if (this.cronJob) {
       logger.warn('Scheduler already running');
       return;
     }
 
-    logger.info(`Starting scheduler with cron: ${cronExpression}`);
+    logger.info(`Starting scheduler with cron: ${cronExpression} (every 30 seconds)`);
+    logger.info(`Trading window: minutes ${this.tradingWindowStart}-${this.tradingWindowEnd} of each hour`);
 
     this.cronJob = cron.schedule(cronExpression, async () => {
       await this.runScan();
@@ -209,27 +236,36 @@ export class TradingScheduler {
       const opportunities = this.calculator.findSingleLegOpportunities(hourlyMarkets);
       logger.info(`Found ${opportunities.length} markets with expensive side (≥70¢)`);
 
-      // Execute trades
+      // Execute trades - ONLY in trading window (last 15 minutes of hour)
       let tradesExecuted = 0;
+      const inTradingWindow = this.isInTradingWindow();
+      const currentMinute = new Date().getMinutes();
+      
       if (opportunities.length > 0) {
-        logger.info(`Attempting to execute ${opportunities.length} single-leg trade(s)...`);
-        logger.info(`Client read-only mode: ${this.client.isReadOnly()}`);
-        
-        try {
-          const trades = await this.executor.executeSingleLegTrades(opportunities);
-          tradesExecuted = trades.length;
-          logger.info(`Successfully executed ${tradesExecuted} trades`);
+        if (!inTradingWindow) {
+          const minutesUntil = this.getMinutesUntilTradingWindow();
+          logger.info(`⏰ ${opportunities.length} opportunity(ies) found, but outside trading window (minute ${currentMinute})`);
+          logger.info(`   Trading window: minutes ${this.tradingWindowStart}-${this.tradingWindowEnd}. Opens in ${minutesUntil} minutes.`);
+        } else {
+          logger.info(`✅ IN TRADING WINDOW (minute ${currentMinute}) - Attempting to execute ${opportunities.length} trade(s)...`);
+          logger.info(`Client read-only mode: ${this.client.isReadOnly()}`);
           
-          if (trades.length > 0) {
-            trades.forEach(trade => {
-              logger.info(`Trade ${trade.id}: ${trade.market_question} (${trade.side?.toUpperCase()}) - Status: ${trade.status}`);
-            });
+          try {
+            const trades = await this.executor.executeSingleLegTrades(opportunities);
+            tradesExecuted = trades.length;
+            logger.info(`Successfully executed ${tradesExecuted} trades`);
+            
+            if (trades.length > 0) {
+              trades.forEach(trade => {
+                logger.info(`Trade ${trade.id}: ${trade.market_question} (${trade.side?.toUpperCase()}) - Status: ${trade.status}`);
+              });
+            }
+          } catch (execError) {
+            logger.error('Trade execution failed:', execError);
           }
-        } catch (execError) {
-          logger.error('Trade execution failed:', execError);
         }
       } else {
-        logger.info('No markets with ≥70¢ side at this time - waiting for opportunity');
+        logger.info(`No markets with ≥70¢ side at this time (minute ${currentMinute}, ${inTradingWindow ? 'IN' : 'outside'} trading window)`);
       }
 
       // Record scan in database
@@ -314,6 +350,11 @@ export class TradingScheduler {
     schedulerActive: boolean;
     autoClaimEnabled: boolean;
     lastClaimTime: string | null;
+    inTradingWindow: boolean;
+    tradingWindowStart: number;
+    tradingWindowEnd: number;
+    currentMinute: number;
+    minutesUntilWindow: number;
   } {
     return {
       isRunning: this.isRunning,
@@ -321,6 +362,11 @@ export class TradingScheduler {
       schedulerActive: this.cronJob !== null,
       autoClaimEnabled: this.autoClaimEnabled,
       lastClaimTime: this.lastClaimTime?.toISOString() || null,
+      inTradingWindow: this.isInTradingWindow(),
+      tradingWindowStart: this.tradingWindowStart,
+      tradingWindowEnd: this.tradingWindowEnd,
+      currentMinute: new Date().getMinutes(),
+      minutesUntilWindow: this.getMinutesUntilTradingWindow(),
     };
   }
 

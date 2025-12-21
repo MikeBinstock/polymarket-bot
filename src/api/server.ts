@@ -301,6 +301,42 @@ export function createServer(
     }
   });
 
+  // Cash out all positions (market sell)
+  app.post('/api/positions/cashout', async (req: Request, res: Response) => {
+    try {
+      const client = (scheduler as any).client as import('../polymarket/client').PolymarketClient;
+      
+      if (client.isReadOnly()) {
+        res.status(400).json({ success: false, error: 'No wallet configured' });
+        return;
+      }
+
+      logger.info('💸 Starting cash out of all positions...');
+      
+      // Run in background
+      client.cashOutAllPositions()
+        .then((result) => {
+          logger.info(`💸 Cash out complete: ${result.success} sold, ${result.failed} failed`);
+          result.results.forEach((r: any) => {
+            if (r.success) {
+              logger.info(`  ✅ Sold ${r.size} shares of ${r.tokenId.substring(0, 15)}...`);
+            } else {
+              logger.warn(`  ❌ Failed to sell ${r.tokenId.substring(0, 15)}...: ${r.error}`);
+            }
+          });
+        })
+        .catch((err: any) => logger.error('❌ Cash out failed:', err.message || err));
+      
+      res.json({ 
+        success: true, 
+        message: 'Cash out started! Check Railway logs for progress.' 
+      });
+    } catch (error: any) {
+      logger.error('Failed to start cash out', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to start cash out' });
+    }
+  });
+
   // Get analytics
   app.get('/api/analytics', (req: Request, res: Response) => {
     try {

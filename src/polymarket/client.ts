@@ -444,6 +444,132 @@ export class PolymarketClient {
     }
   }
 
+  /**
+   * Place a market sell order (FOK) to cash out a position
+   */
+  async placeSellOrder(tokenId: string, size: number): Promise<any> {
+    if (this.isReadOnly()) {
+      throw new Error('Cannot place orders in read-only mode. Configure a valid private key.');
+    }
+
+    try {
+      if (!this.client) {
+        throw new Error('Client not initialized');
+      }
+
+      // Get the best bid price from order book for market sell
+      const orderBook = await this.client.getOrderBook(tokenId);
+      let marketPrice = 0.01; // Minimum price if no bids
+      
+      if (orderBook.bids && orderBook.bids.length > 0) {
+        // Find the best (highest) bid price
+        const bidPrices = orderBook.bids.map((b: any) => parseFloat(b.price));
+        const bestBid = Math.max(...bidPrices);
+        
+        // Use the best bid price - small buffer to ensure fill
+        // Round to 2 decimal places
+        marketPrice = Math.max(Math.floor((bestBid - 0.01) * 100) / 100, 0.01);
+        
+        logger.info(`📊 Order book: Best bid=${bestBid.toFixed(3)}, using sell price=${marketPrice.toFixed(3)}`);
+      } else {
+        logger.warn(`No bids in order book, using minimum price: ${marketPrice}`);
+      }
+
+      const priceInCents = Math.round(marketPrice * 100);
+      const finalPrice = priceInCents / 100;
+      const wholeShares = Math.floor(size);
+      
+      if (wholeShares < 1) {
+        throw new Error(`Cannot sell less than 1 share: ${size}`);
+      }
+
+      logger.info(`Placing MARKET sell order: token=${tokenId.substring(0, 15)}...`);
+      logger.info(`  Price: ${finalPrice}, Size: ${wholeShares} shares`);
+
+      // Create sell order
+      const order = await this.client.createOrder({
+        tokenID: tokenId,
+        price: finalPrice,
+        size: wholeShares,
+        side: Side.SELL,
+      });
+
+      // Post with FOK (Fill or Kill) order type for immediate execution
+      const response = await this.client.postOrder(order, OrderType.FOK);
+      
+      if (response && response.error) {
+        const errorMsg = response.error || 'Unknown error';
+        logger.error(`Sell order rejected by Polymarket: ${errorMsg}`, response);
+        throw new Error(`Sell order rejected: ${errorMsg}`);
+      }
+      
+      if (!response || (!response.orderID && !response.id)) {
+        logger.error('Sell order response missing order ID', response);
+        throw new Error('Sell order failed: No order ID returned');
+      }
+      
+      logger.info(`✅ MARKET SELL ORDER FILLED - ID: ${response.orderID || response.id}`);
+      return response;
+    } catch (error: any) {
+      let errorMsg = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to place sell order: ${errorMsg}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Cash out all open positions by market selling
+   */
+  async cashOutAllPositions(): Promise<{ success: number; failed: number; results: any[] }> {
+    if (this.isReadOnly()) {
+      throw new Error('Cannot cash out in read-only mode');
+    }
+
+    const results: any[] = [];
+    let success = 0;
+    let failed = 0;
+
+    try {
+      const positions = await this.getPositions();
+      const openPositions = positions.filter(p => {
+        const size = parseFloat(p.size || '0');
+        return size > 0 && !p.resolved;
+      });
+
+      logger.info(`Found ${openPositions.length} open positions to cash out`);
+
+      for (const position of openPositions) {
+        const tokenId = position.asset || position.tokenId;
+        const size = parseFloat(position.size || '0');
+
+        if (!tokenId || size <= 0) {
+          logger.warn(`Skipping invalid position:`, position);
+          continue;
+        }
+
+        try {
+          logger.info(`Cashing out position: ${position.title || tokenId.substring(0, 15)}... (${size} shares)`);
+          const result = await this.placeSellOrder(tokenId, size);
+          results.push({ tokenId, size, result, success: true });
+          success++;
+        } catch (error: any) {
+          logger.error(`Failed to cash out ${tokenId}: ${error.message}`);
+          results.push({ tokenId, size, error: error.message, success: false });
+          failed++;
+        }
+
+        // Small delay between orders
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      logger.info(`Cash out complete: ${success} succeeded, ${failed} failed`);
+      return { success, failed, results };
+    } catch (error) {
+      logger.error('Cash out failed:', error);
+      throw error;
+    }
+  }
+
   async cancelOrder(orderId: string): Promise<void> {
     if (this.isReadOnly()) {
       throw new Error('Cannot cancel orders in read-only mode');

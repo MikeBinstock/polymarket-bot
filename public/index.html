@@ -1134,6 +1134,28 @@
       </div>
     </div>
 
+    <!-- Trading Window Indicator -->
+    <div class="card" style="margin-bottom: 24px; padding: 16px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 1.5rem;" id="windowIcon">⏰</span>
+          <div>
+            <div style="font-weight: 600; font-size: 1rem;" id="windowStatus">Trading Window</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);" id="windowDetails">Minutes 45-59 of each hour</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div style="text-align: center;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 700;" id="currentMinute">--</div>
+            <div style="font-size: 0.7rem; color: var(--text-secondary);">Current Minute</div>
+          </div>
+          <div id="windowBadge" class="status-badge inactive" style="font-size: 0.9rem; padding: 10px 20px;">
+            <span>WAITING</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Analytics Dashboard -->
     <div class="card" style="margin-bottom: 24px;">
       <div class="card-header">
@@ -1284,7 +1306,8 @@
         <h2 class="card-title">💰 Positions & Winnings</h2>
         <div style="display: flex; gap: 8px;">
           <button class="btn btn-secondary" id="refreshPositionsBtn">🔄 Refresh</button>
-          <button class="btn btn-primary" id="claimAllBtn">💵 Claim All Winnings</button>
+          <button class="btn btn-primary" id="claimAllBtn">💵 Claim Winnings</button>
+          <button class="btn btn-danger" id="cashOutBtn">💸 Cash Out All</button>
         </div>
       </div>
       <div id="positionsContainer">
@@ -1353,6 +1376,11 @@
     document.getElementById('claimAllBtn').addEventListener('click', claimAllWinnings);
     document.getElementById('refreshAnalyticsBtn').addEventListener('click', fetchAnalytics);
     document.getElementById('exportCsvBtn').addEventListener('click', exportTradesToCsv);
+    document.getElementById('cashOutBtn').addEventListener('click', cashOutAll);
+    
+    // Update trading window status every second
+    setInterval(updateTradingWindow, 1000);
+    updateTradingWindow(); // Initial update
 
     // API Functions
     async function apiCall(endpoint, method = 'GET', body = null) {
@@ -1561,7 +1589,63 @@
       } finally {
         const btn = document.getElementById('claimAllBtn');
         btn.disabled = false;
-        btn.innerHTML = '💵 Claim All Winnings';
+        btn.innerHTML = '💵 Claim Winnings';
+      }
+    }
+
+    async function cashOutAll() {
+      if (!confirm('⚠️ CASH OUT ALL POSITIONS?\n\nThis will MARKET SELL all your open positions immediately at the best available bid price.\n\nYou may incur losses. Are you sure?')) return;
+      
+      try {
+        const btn = document.getElementById('cashOutBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Selling...';
+        
+        await apiCall('/positions/cashout', 'POST');
+        showToast('Cash out started! Check Railway logs for progress.', 'success');
+        
+        // Refresh positions after a delay
+        setTimeout(fetchPositions, 5000);
+      } catch (error) {
+        showToast('Failed to cash out: ' + error.message, 'error');
+      } finally {
+        const btn = document.getElementById('cashOutBtn');
+        btn.disabled = false;
+        btn.innerHTML = '💸 Cash Out All';
+      }
+    }
+
+    function updateTradingWindow() {
+      const now = new Date();
+      const minute = now.getMinutes();
+      const windowStart = 45;
+      const windowEnd = 59;
+      const inWindow = minute >= windowStart && minute <= windowEnd;
+      
+      // Update current minute
+      document.getElementById('currentMinute').textContent = minute.toString().padStart(2, '0');
+      
+      // Update badge
+      const badge = document.getElementById('windowBadge');
+      const icon = document.getElementById('windowIcon');
+      const status = document.getElementById('windowStatus');
+      const details = document.getElementById('windowDetails');
+      
+      if (inWindow) {
+        badge.className = 'status-badge active';
+        badge.innerHTML = '<span>🟢 TRADING</span>';
+        icon.textContent = '✅';
+        status.textContent = 'Trading Window OPEN';
+        status.style.color = 'var(--success)';
+        details.textContent = `${windowEnd - minute + 1} minutes remaining`;
+      } else {
+        const minutesUntil = windowStart - minute;
+        badge.className = 'status-badge warning';
+        badge.innerHTML = '<span>⏳ WAITING</span>';
+        icon.textContent = '⏰';
+        status.textContent = 'Trading Window Closed';
+        status.style.color = 'var(--warning)';
+        details.textContent = `Opens in ${minutesUntil} minute${minutesUntil !== 1 ? 's' : ''} (at :${windowStart})`;
       }
     }
 

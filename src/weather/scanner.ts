@@ -69,7 +69,7 @@ export class WeatherScanner {
     const markets: WeatherMarket[] = [];
 
     try {
-      // First try searching events
+      // Method 1: Search events with "highest temperature"
       logger.info('Searching for temperature events...');
       const eventsResponse = await fetch(
         `${GAMMA_API_URL}/events?closed=false&limit=100&_q=${encodeURIComponent('highest temperature')}`,
@@ -81,20 +81,25 @@ export class WeatherScanner {
         logger.info(`Found ${events.length} events matching "highest temperature"`);
         
         for (const event of events) {
-          // Each event may have multiple markets (one per temperature bucket)
-          if (event.markets && event.markets.length > 0) {
-            const weatherMarket = this.parseEventAsMarket(event);
-            if (weatherMarket) {
-              markets.push(weatherMarket);
-            }
+          logger.debug(`  Event: ${event.title || event.slug}`);
+          const weatherMarket = this.parseEventAsMarket(event);
+          if (weatherMarket) {
+            markets.push(weatherMarket);
           }
         }
       }
 
-      // Also try market search
+      // Method 2: Try direct slug patterns for known cities
+      logger.info('Trying direct event slug lookup...');
+      const slugPatterns = await this.findEventsBySlugs();
+      for (const m of slugPatterns) {
+        if (!markets.find(existing => existing.marketId === m.marketId)) {
+          markets.push(m);
+        }
+      }
+
+      // Method 3: Broad market search
       const marketsFound = await this.searchBroadly();
-      
-      // Merge, avoiding duplicates
       for (const m of marketsFound) {
         if (!markets.find(existing => existing.marketId === m.marketId)) {
           markets.push(m);
@@ -105,8 +110,56 @@ export class WeatherScanner {
       return markets;
     } catch (error) {
       logger.error('Failed to fetch temperature markets:', error);
-      return await this.searchBroadly();
+      return [];
     }
+  }
+
+  /**
+   * Try to find events by known slug patterns
+   */
+  private async findEventsBySlugs(): Promise<WeatherMarket[]> {
+    const markets: WeatherMarket[] = [];
+    
+    // Generate slug patterns for upcoming days
+    const today = new Date();
+    const cities = ['nyc', 'la', 'chicago', 'miami', 'dallas', 'seattle'];
+    
+    for (let daysAhead = 0; daysAhead <= 3; daysAhead++) {
+      const targetDate = new Date(today);
+      targetDate.setDate(today.getDate() + daysAhead);
+      
+      const month = targetDate.toLocaleString('en-US', { month: 'long' }).toLowerCase();
+      const day = targetDate.getDate();
+      
+      for (const city of cities) {
+        // Pattern: highest-temperature-in-nyc-on-december-21
+        const slug = `highest-temperature-in-${city}-on-${month}-${day}`;
+        
+        try {
+          const response = await fetch(
+            `${GAMMA_API_URL}/events?slug=${slug}`,
+            { headers: { 'Accept': 'application/json' } }
+          );
+          
+          if (response.ok) {
+            const events = await response.json() as any[];
+            if (events.length > 0) {
+              logger.info(`✓ Found event by slug: ${slug}`);
+              const weatherMarket = this.parseEventAsMarket(events[0]);
+              if (weatherMarket) {
+                markets.push(weatherMarket);
+              }
+            }
+          }
+        } catch (e) {
+          // Ignore errors for individual slug lookups
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    
+    return markets;
   }
 
   /**
@@ -196,6 +249,11 @@ export class WeatherScanner {
         if (response.ok) {
           const data = await response.json() as any[];
           logger.info(`  Found ${data.length} results for "${keyword}"`);
+          
+          // Log first few results for debugging
+          if (data.length > 0 && keyword === 'highest temperature') {
+            logger.info(`  Sample result: ${JSON.stringify(data[0]).substring(0, 300)}...`);
+          }
           
           for (const market of data) {
             const weatherMarket = this.parseWeatherMarket(market);

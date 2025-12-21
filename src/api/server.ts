@@ -56,8 +56,8 @@ export function createServer(
       }
     }
 
-    // Check query param for simple auth
-    if (req.query.password === config.dashboardPassword) {
+    // Check query param for simple auth (supports both 'password' and 'auth')
+    if (req.query.password === config.dashboardPassword || req.query.auth === config.dashboardPassword) {
       return next();
     }
 
@@ -320,6 +320,67 @@ export function createServer(
       res.json({ success: true, data: trades });
     } catch (error) {
       logger.error('Failed to get trades', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  });
+
+  // Export trades as CSV
+  app.get('/api/trades/export', (req: Request, res: Response) => {
+    try {
+      const trades = db.getAllTrades();
+      
+      // CSV header
+      const headers = [
+        'ID',
+        'Date',
+        'Time (UTC)',
+        'Market',
+        'Type',
+        'Side',
+        'UP Price',
+        'DOWN Price',
+        'UP Size',
+        'DOWN Size',
+        'Combined Cost',
+        'Status',
+        'P&L',
+        'Resolved At'
+      ];
+      
+      // Convert trades to CSV rows
+      const rows = trades.map(trade => {
+        const createdAt = new Date(trade.created_at);
+        const resolvedAt = trade.resolved_at ? new Date(trade.resolved_at) : null;
+        
+        return [
+          trade.id,
+          createdAt.toISOString().split('T')[0],
+          createdAt.toISOString().split('T')[1].replace('Z', ''),
+          `"${(trade.market_question || trade.market_id).replace(/"/g, '""')}"`,
+          trade.trade_type || 'single_leg',
+          trade.side?.toUpperCase() || 'N/A',
+          trade.up_price?.toFixed(4) || '',
+          trade.down_price?.toFixed(4) || '',
+          trade.up_size?.toFixed(2) || '',
+          trade.down_size?.toFixed(2) || '',
+          trade.combined_cost?.toFixed(2) || '',
+          trade.status,
+          trade.pnl?.toFixed(2) || '',
+          resolvedAt ? resolvedAt.toISOString() : ''
+        ].join(',');
+      });
+      
+      const csv = [headers.join(','), ...rows].join('\n');
+      
+      // Set headers for file download
+      const filename = `polymarket-trades-${new Date().toISOString().split('T')[0]}.csv`;
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(csv);
+      
+      logger.info(`Exported ${trades.length} trades to CSV`);
+    } catch (error) {
+      logger.error('Failed to export trades', error);
       res.status(500).json({ success: false, error: 'Internal server error' });
     }
   });

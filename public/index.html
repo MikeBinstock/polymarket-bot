@@ -1299,7 +1299,10 @@
     <div class="card">
       <div class="card-header">
         <h2 class="card-title">Recent Trades</h2>
-        <button class="btn btn-secondary" id="refreshTradesBtn">🔄 Refresh</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary" id="refreshTradesBtn">🔄 Refresh</button>
+          <button class="btn btn-primary" id="exportCsvBtn">📥 Export CSV</button>
+        </div>
       </div>
       <div id="tradesContainer">
         <div class="empty-state">
@@ -1349,6 +1352,7 @@
     document.getElementById('refreshPositionsBtn').addEventListener('click', fetchPositions);
     document.getElementById('claimAllBtn').addEventListener('click', claimAllWinnings);
     document.getElementById('refreshAnalyticsBtn').addEventListener('click', fetchAnalytics);
+    document.getElementById('exportCsvBtn').addEventListener('click', exportTradesToCsv);
 
     // API Functions
     async function apiCall(endpoint, method = 'GET', body = null) {
@@ -1625,6 +1629,32 @@
         fetchStats();
       } catch (error) {
         showToast('Failed to reset: ' + error.message, 'error');
+      }
+    }
+
+    function exportTradesToCsv() {
+      try {
+        const btn = document.getElementById('exportCsvBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Exporting...';
+        
+        // Create a download link with auth header
+        const link = document.createElement('a');
+        link.href = `/api/trades/export?auth=${encodeURIComponent(password)}`;
+        link.download = `polymarket-trades-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showToast('CSV export started!', 'success');
+      } catch (error) {
+        showToast('Failed to export: ' + error.message, 'error');
+      } finally {
+        setTimeout(() => {
+          const btn = document.getElementById('exportCsvBtn');
+          btn.disabled = false;
+          btn.innerHTML = '📥 Export CSV';
+        }, 1000);
       }
     }
 

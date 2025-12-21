@@ -197,6 +197,11 @@ export class TradeDatabase {
     return stmt.all(limit) as Trade[];
   }
 
+  getAllTrades(): Trade[] {
+    const stmt = this.db.prepare('SELECT * FROM trades ORDER BY created_at DESC');
+    return stmt.all() as Trade[];
+  }
+
   getOpenTrades(): Trade[] {
     const stmt = this.db.prepare(`
       SELECT * FROM trades 

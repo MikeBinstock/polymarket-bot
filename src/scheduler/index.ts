@@ -40,8 +40,8 @@ export class TradingScheduler {
   private executor: TradeExecutor;
   private autoClaimEnabled = true;
   
-  // Trading window: only trade in last 30 minutes of hour (minutes 30-59)
-  private tradingWindowStart = 30;  // Minute 30
+  // Trading window: only trade in last 15 minutes of hour (minutes 45-59)
+  private tradingWindowStart = 45;  // Minute 45
   private tradingWindowEnd = 59;    // Minute 59
 
   constructor(
@@ -58,7 +58,7 @@ export class TradingScheduler {
   }
 
   /**
-   * Check if current time is within the trading window (last 30 minutes of hour)
+   * Check if current time is within the trading window (last 15 minutes of hour)
    */
   isInTradingWindow(): boolean {
     const now = new Date();

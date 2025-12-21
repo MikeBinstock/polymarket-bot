@@ -1472,7 +1472,7 @@
           <span style="font-size: 1.5rem;" id="ethWindowIcon">⏰</span>
           <div>
             <div style="font-weight: 600; font-size: 1rem;" id="ethWindowStatus">Trading Window</div>
-            <div style="font-size: 0.8rem; color: var(--text-secondary);" id="ethWindowDetails">Minutes 30-59 of each hour</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);" id="ethWindowDetails">Minutes 45-59 of each hour</div>
           </div>
         </div>
         <div style="display: flex; align-items: center; gap: 16px;">
@@ -1599,7 +1599,7 @@
           <span style="font-size: 1.5rem;" id="xrpWindowIcon">⏰</span>
           <div>
             <div style="font-weight: 600; font-size: 1rem;" id="xrpWindowStatus">Trading Window</div>
-            <div style="font-size: 0.8rem; color: var(--text-secondary);" id="xrpWindowDetails">Minutes 30-59 of each hour</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);" id="xrpWindowDetails">Minutes 45-59 of each hour</div>
           </div>
         </div>
         <div style="display: flex; align-items: center; gap: 16px;">
@@ -1726,7 +1726,7 @@
           <span style="font-size: 1.5rem;" id="solWindowIcon">⏰</span>
           <div>
             <div style="font-weight: 600; font-size: 1rem;" id="solWindowStatus">Trading Window</div>
-            <div style="font-size: 0.8rem; color: var(--text-secondary);" id="solWindowDetails">Minutes 30-59 of each hour</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);" id="solWindowDetails">Minutes 45-59 of each hour</div>
           </div>
         </div>
         <div style="display: flex; align-items: center; gap: 16px;">
@@ -2113,7 +2113,7 @@
     function updateTradingWindow() {
       const now = new Date();
       const minute = now.getMinutes();
-      const windowStart = 30;
+      const windowStart = 45;
       const windowEnd = 59;
       const inWindow = minute >= windowStart && minute <= windowEnd;
       

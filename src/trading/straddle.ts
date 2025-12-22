@@ -7,15 +7,15 @@ const logger = createLogger('StrategyCalculator');
 /**
  * UPDATED STRATEGY - Single Leg Expensive Options
  * 
- * Based on research showing expensive options (≥70¢) win ~98% of the time:
- * - Buy whichever side hits 70¢ first
- * - Expected value: 0.98 × $1 - $0.70 = +$0.28 per share (+40% ROI)
+ * Based on research showing expensive options (≥80¢) win ~99% of the time:
+ * - Buy whichever side hits 80¢ first
+ * - Expected value: 0.99 × $1 - $0.80 = +$0.19 per share (+24% ROI)
  * 
  * This is simpler and more profitable than balanced straddles.
  */
 
 // Strategy threshold - buy when price hits this level
-const EXPENSIVE_THRESHOLD = 0.70; // 70¢ = trigger to buy
+const EXPENSIVE_THRESHOLD = 0.80; // 80¢ = trigger to buy
 
 // Expected win rate for options at different price points
 function getExpectedWinRate(price: number): number {
@@ -35,7 +35,7 @@ export class StraddleCalculator {
   constructor(private config: StraddleConfig) {}
 
   /**
-   * NEW STRATEGY: Find single-leg opportunities where one side is ≥70¢
+   * NEW STRATEGY: Find single-leg opportunities where one side is ≥80¢
    * Buy the expensive side only
    */
   findSingleLegOpportunity(market: HourlyMarket): SingleLegOpportunity | null {
@@ -47,7 +47,7 @@ export class StraddleCalculator {
       return null;
     }
 
-    // Check if UP side is expensive (≥70¢)
+    // Check if UP side is expensive (≥80¢)
     if (upPrice >= EXPENSIVE_THRESHOLD) {
       const size = this.config.betSize / upPrice;
       const expectedWinRate = getExpectedWinRate(upPrice);
@@ -77,7 +77,7 @@ export class StraddleCalculator {
       };
     }
 
-    // Check if DOWN side is expensive (≥70¢)
+    // Check if DOWN side is expensive (≥80¢)
     if (downPrice >= EXPENSIVE_THRESHOLD) {
       const size = this.config.betSize / downPrice;
       const expectedWinRate = getExpectedWinRate(downPrice);
@@ -108,7 +108,7 @@ export class StraddleCalculator {
     }
 
     // Neither side is expensive enough
-    logger.debug(`Market ${market.title}: No side at 70¢+ (Up=${(upPrice*100).toFixed(1)}¢, Down=${(downPrice*100).toFixed(1)}¢)`);
+    logger.debug(`Market ${market.title}: No side at 80¢+ (Up=${(upPrice*100).toFixed(1)}¢, Down=${(downPrice*100).toFixed(1)}¢)`);
     return null;
   }
 
@@ -128,7 +128,7 @@ export class StraddleCalculator {
     // Sort by expected value (highest first)
     opportunities.sort((a, b) => b.expectedValue - a.expectedValue);
 
-    logger.info(`Found ${opportunities.length} single-leg opportunities at ≥70¢`);
+    logger.info(`Found ${opportunities.length} single-leg opportunities at ≥80¢`);
     return opportunities;
   }
 

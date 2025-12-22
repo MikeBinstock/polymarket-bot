@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Polymarket 70¢ Strategy Bot</title>
+  <title>Polymarket 80¢ Strategy Bot</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1431,7 +1431,7 @@
       <div id="tradesContainer">
         <div class="empty-state">
           <div class="empty-state-icon">📭</div>
-          <p>No trades yet. The bot buys when any side hits ≥70¢ (expected 98% win rate).</p>
+          <p>No trades yet. The bot buys when any side hits ≥80¢ (expected 99% win rate).</p>
         </div>
       </div>
     </div>
@@ -1558,7 +1558,7 @@
       <div id="ethTradesContainer">
         <div class="empty-state">
           <div class="empty-state-icon">📭</div>
-          <p>No trades yet. The bot buys when any side hits ≥70¢ (expected 98% win rate).</p>
+          <p>No trades yet. The bot buys when any side hits ≥80¢ (expected 99% win rate).</p>
         </div>
       </div>
     </div>
@@ -1685,7 +1685,7 @@
       <div id="xrpTradesContainer">
         <div class="empty-state">
           <div class="empty-state-icon">📭</div>
-          <p>No trades yet. The bot buys when any side hits ≥70¢ (expected 98% win rate).</p>
+          <p>No trades yet. The bot buys when any side hits ≥80¢ (expected 99% win rate).</p>
         </div>
       </div>
     </div>
@@ -1812,7 +1812,7 @@
       <div id="solTradesContainer">
         <div class="empty-state">
           <div class="empty-state-icon">📭</div>
-          <p>No trades yet. The bot buys when any side hits ≥70¢ (expected 98% win rate).</p>
+          <p>No trades yet. The bot buys when any side hits ≥80¢ (expected 99% win rate).</p>
         </div>
       </div>
     </div>
@@ -2350,7 +2350,7 @@
       if (!container) return;
       
       if (!trades || trades.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>No trades yet. The bot buys when any side hits ≥70¢ (expected 98% win rate).</p></div>';
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>No trades yet. The bot buys when any side hits ≥80¢ (expected 99% win rate).</p></div>';
         return;
       }
       
@@ -2444,7 +2444,7 @@
               <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
                 ${m.isViable 
                   ? `<span class="viable-badge">✓ Buy ${m.viableSide?.toUpperCase()} @ ${((m.viableSide === 'up' ? m.upPrice : m.downPrice) * 100).toFixed(0)}¢</span>` 
-                  : `<span class="not-viable-badge">— Waiting for ≥70¢</span>`
+                  : `<span class="not-viable-badge">— Waiting for ≥80¢</span>`
                 }
                 <span style="font-size: 0.75rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
                   EV: ${m.expectedValue >= 0 ? '+' : ''}$${m.expectedValue.toFixed(2)}
@@ -2561,7 +2561,7 @@
         container.innerHTML = `
           <div class="empty-state">
             <div class="empty-state-icon">📭</div>
-            <p>No trades yet. The bot will automatically buy when any side hits ≥70¢.</p>
+            <p>No trades yet. The bot will automatically buy when any side hits ≥80¢.</p>
           </div>
         `;
         return;

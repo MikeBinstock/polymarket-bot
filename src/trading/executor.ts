@@ -133,7 +133,7 @@ export class TradeExecutor {
       logger.info(`Processing opportunity ${i + 1}/${opportunities.length}: ${opportunity.market.question} (${opportunity.side.toUpperCase()})`);
       
       // Check if we already have an open trade for this SIDE of the market
-      // Allow buying the opposite side if it also hits 70¢
+      // Allow buying the opposite side if it also hits 80¢
       const existingTrades = this.db.getTradesByMarketId(opportunity.market.condition_id);
       const existingTradeOnSameSide = existingTrades.find(t => 
         ['pending', 'open', 'partial'].includes(t.status) && 

@@ -9,7 +9,7 @@ import { createLogger } from '../utils/logger';
 
 const logger = createLogger('Scheduler');
 
-// Supported crypto types for the 70¢ strategy
+// Supported crypto types for the 80¢ strategy
 export const SUPPORTED_CRYPTOS: CryptoType[] = ['BTC', 'ETH', 'XRP', 'SOL'];
 
 export interface LiveMarketData {
@@ -190,7 +190,7 @@ export class TradingScheduler {
 
   /**
    * Run a single market scan and execute trades for ALL crypto types
-   * NEW STRATEGY: Buy expensive side (≥70¢) only
+   * NEW STRATEGY: Buy expensive side (≥80¢) only
    */
   async runScan(): Promise<void> {
     if (this.isRunning) {
@@ -205,7 +205,7 @@ export class TradingScheduler {
 
     this.isRunning = true;
     this.lastScanTime = new Date();
-    logger.info('=== STARTING MULTI-CRYPTO MARKET SCAN (Single-Leg Strategy: Buy ≥70¢) ===');
+    logger.info('=== STARTING MULTI-CRYPTO MARKET SCAN (Single-Leg Strategy: Buy ≥80¢) ===');
 
     try {
       // Update calculator config in case it changed
@@ -247,12 +247,12 @@ export class TradingScheduler {
           this.marketDataByCrypto.set(crypto, marketData);
           totalMarkets += hourlyMarkets.length;
 
-          // Find single-leg opportunities (≥70¢ on either side)
+          // Find single-leg opportunities (≥80¢ on either side)
           const opportunities = this.calculator.findSingleLegOpportunities(hourlyMarkets);
           totalOpportunities += opportunities.length;
 
           if (opportunities.length > 0) {
-            logger.info(`Found ${opportunities.length} ${crypto} opportunities with expensive side (≥70¢)`);
+            logger.info(`Found ${opportunities.length} ${crypto} opportunities with expensive side (≥80¢)`);
             
             if (inTradingWindow) {
               logger.info(`✅ IN TRADING WINDOW - Executing ${crypto} trades...`);
@@ -346,7 +346,7 @@ export class TradingScheduler {
           this.marketDataByCrypto.set(c, marketData);
           totalMarkets += hourlyMarkets.length;
 
-          // Find single-leg opportunities (≥70¢)
+          // Find single-leg opportunities (≥80¢)
           const opportunities = this.calculator.findSingleLegOpportunities(hourlyMarkets);
           totalOpportunities += opportunities.length;
           

@@ -1954,19 +1954,30 @@
       fetchStats();
     });
 
-    botToggle.addEventListener('click', toggleBot);
-    document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
-    document.getElementById('forceScanBtn').addEventListener('click', forceScan);
-    document.getElementById('emergencyStopBtn').addEventListener('click', emergencyStop);
-    document.getElementById('resetBtn').addEventListener('click', resetBot);
-    document.getElementById('approveBtn').addEventListener('click', approveUsdc);
-    document.getElementById('refreshTradesBtn').addEventListener('click', () => fetchStats());
-    document.getElementById('refreshMarketsBtn').addEventListener('click', fetchLiveMarkets);
-    document.getElementById('refreshPositionsBtn').addEventListener('click', fetchPositions);
-    document.getElementById('claimAllBtn').addEventListener('click', claimAllWinnings);
-    document.getElementById('exportCsvBtn').addEventListener('click', exportTradesToCsv);
-    document.getElementById('cashOutBtn').addEventListener('click', cashOutAll);
-    document.getElementById('approveSellBtn').addEventListener('click', approveSelling);
+    // Global controls - use safe addEventListener that checks element exists
+    if (botToggle) botToggle.addEventListener('click', toggleBot);
+    
+    const emergencyStopBtn = document.getElementById('emergencyStopBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const approveBtn = document.getElementById('approveBtn');
+    const refreshTradesBtn = document.getElementById('refreshTradesBtn');
+    const refreshMarketsBtn = document.getElementById('refreshMarketsBtn');
+    const refreshPositionsBtn = document.getElementById('refreshPositionsBtn');
+    const claimAllBtn = document.getElementById('claimAllBtn');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const cashOutBtn = document.getElementById('cashOutBtn');
+    const approveSellBtn = document.getElementById('approveSellBtn');
+    
+    if (emergencyStopBtn) emergencyStopBtn.addEventListener('click', emergencyStop);
+    if (resetBtn) resetBtn.addEventListener('click', resetBot);
+    if (approveBtn) approveBtn.addEventListener('click', approveUsdc);
+    if (refreshTradesBtn) refreshTradesBtn.addEventListener('click', () => fetchStats());
+    if (refreshMarketsBtn) refreshMarketsBtn.addEventListener('click', fetchLiveMarkets);
+    if (refreshPositionsBtn) refreshPositionsBtn.addEventListener('click', fetchPositions);
+    if (claimAllBtn) claimAllBtn.addEventListener('click', claimAllWinnings);
+    if (exportCsvBtn) exportCsvBtn.addEventListener('click', exportTradesToCsv);
+    if (cashOutBtn) cashOutBtn.addEventListener('click', cashOutAll);
+    if (approveSellBtn) approveSellBtn.addEventListener('click', approveSelling);
     
     // Tab switching
     document.querySelectorAll('.main-tab').forEach(tab => {
@@ -2663,7 +2674,7 @@
         fetchWeatherStatus();
       } else if (CRYPTO_TABS.includes(tabId) && tabId !== 'btc') {
         // Fetch markets for the selected crypto
-        fetchCryptoMarkets(tabId.toUpperCase());
+        fetchSingleCryptoMarkets(tabId.toUpperCase());
       }
     }
     

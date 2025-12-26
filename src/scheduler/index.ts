@@ -252,13 +252,13 @@ export class TradingScheduler {
         try {
           // Get per-crypto settings
           const cryptoSettings = this.runtimeConfig.getCryptoSettings(crypto as ConfigCryptoType);
-          // Individual crypto enabled OR global enabled (backwards compatible)
-          const isEnabled = cryptoSettings.enabled || this.runtimeConfig.botEnabled;
+          // ONLY check if this specific crypto toggle is ON (not global)
+          const isEnabled = cryptoSettings.enabled;
           const minPrice = cryptoSettings.minPrice;
           const betSize = cryptoSettings.betSize;
           const thresholdPct = (minPrice * 100).toFixed(0);
           
-          logger.info(`--- Scanning ${CRYPTO_DISPLAY_NAMES[crypto]} (${crypto}) | Enabled: ${isEnabled} | Threshold: ${thresholdPct}¢ | Bet: $${betSize} ---`);
+          logger.info(`--- Scanning ${CRYPTO_DISPLAY_NAMES[crypto]} (${crypto}) | Toggle: ${isEnabled ? 'ON' : 'OFF'} | Threshold: ${thresholdPct}% | Bet: $${betSize} ---`);
           
           // Fetch markets for this crypto (always fetch for dashboard display)
           const hourlyMarkets = await this.scanner.scanHourlyCryptoMarkets(crypto);
@@ -285,7 +285,7 @@ export class TradingScheduler {
 
           // Only look for opportunities if this crypto is enabled
           if (!isEnabled) {
-            logger.info(`${crypto} is disabled, skipping trade execution`);
+            logger.info(`⛔ ${crypto} toggle is OFF, skipping trade execution`);
             continue;
           }
 
@@ -364,10 +364,12 @@ export class TradingScheduler {
         try {
           // Get per-crypto settings
           const cryptoSettings = this.runtimeConfig.getCryptoSettings(c as ConfigCryptoType);
-          // Individual crypto enabled OR global enabled (backwards compatible)
-          const isEnabled = cryptoSettings.enabled || this.runtimeConfig.botEnabled;
+          // ONLY check if this specific crypto toggle is ON (not global)
+          const isEnabled = cryptoSettings.enabled;
           const minPrice = cryptoSettings.minPrice;
           const betSize = cryptoSettings.betSize;
+          
+          logger.info(`Force scan ${c}: enabled=${isEnabled}, threshold=${(minPrice*100).toFixed(0)}%, bet=$${betSize}`);
           
           // Scan hourly markets for this crypto
           const hourlyMarkets = await this.scanner.scanHourlyCryptoMarkets(c);
@@ -395,13 +397,21 @@ export class TradingScheduler {
           const opportunities = this.calculator.findSingleLegOpportunities(hourlyMarkets, minPrice, betSize);
           totalOpportunities += opportunities.length;
           
-          // Only execute trades if this specific crypto is enabled AND in trading window
+          // Only execute trades if:
+          // 1. This specific crypto toggle is ON
+          // 2. Currently in trading window (minutes 45-59)
           const inWindow = this.isInTradingWindow();
           if (opportunities.length > 0 && isEnabled && inWindow) {
+            logger.info(`✅ Executing ${c} trades: ${opportunities.length} opportunities, in window, toggle ON`);
             const trades = await this.executor.executeSingleLegTrades(opportunities);
             totalTradesExecuted += trades.length;
-          } else if (opportunities.length > 0 && !inWindow) {
-            logger.info(`⏰ ${c} has opportunities but outside trading window (minute ${new Date().getMinutes()})`);
+          } else if (opportunities.length > 0) {
+            // Log why we're not trading
+            if (!isEnabled) {
+              logger.info(`⛔ ${c} has ${opportunities.length} opportunity(ies) but toggle is OFF`);
+            } else if (!inWindow) {
+              logger.info(`⏰ ${c} has ${opportunities.length} opportunity(ies) but outside trading window (minute ${new Date().getMinutes()})`);
+            }
           }
         } catch (err) {
           logger.error(`Force scan failed for ${c}:`, err);

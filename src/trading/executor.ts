@@ -155,7 +155,8 @@ export class TradeExecutor {
       }
 
       try {
-        logger.info(`No existing trade found, executing new single-leg trade...`);
+        logger.info(`No existing trade found, executing new single-leg trade for ${opportunity.market.question}...`);
+        logger.info(`  Side: ${opportunity.side}, Price: $${opportunity.price.toFixed(3)}, Size: ${opportunity.size.toFixed(2)}`);
         const trade = await this.executeSingleLeg(opportunity);
         if (trade) {
           trades.push(trade);
@@ -163,8 +164,13 @@ export class TradeExecutor {
         } else {
           logger.warn(`executeSingleLeg returned null for ${opportunity.market.question}`);
         }
-      } catch (error) {
-        logger.error(`Error executing single-leg trade for ${opportunity.market.question}:`, error);
+      } catch (error: any) {
+        const errorMsg = error?.message || error?.toString?.() || JSON.stringify(error) || 'Unknown error';
+        logger.error(`❌ TRADE FAILED for ${opportunity.market.question}`);
+        logger.error(`   Error: ${errorMsg}`);
+        if (error?.stack) {
+          logger.error(`   Stack: ${error.stack.split('\n').slice(0, 3).join('\n')}`);
+        }
       }
 
       // Add small delay between orders to avoid rate limiting

@@ -488,6 +488,40 @@ export function createServer(
     }
   });
 
+  // Manual claim by condition ID
+  app.post('/api/positions/claim/:conditionId', async (req: Request, res: Response) => {
+    try {
+      const client = (scheduler as any).client as import('../polymarket/client').PolymarketClient;
+      const { conditionId } = req.params;
+      const { negRisk } = req.body;
+      
+      if (client.isReadOnly()) {
+        res.status(400).json({ success: false, error: 'No wallet configured' });
+        return;
+      }
+
+      if (!conditionId) {
+        res.status(400).json({ success: false, error: 'Condition ID required' });
+        return;
+      }
+
+      logger.info(`Manual claim requested for condition: ${conditionId}`);
+      
+      // Run claim in background
+      client.redeemPosition(conditionId, negRisk === true)
+        .then((txHash) => logger.info(`✅ Manual claim successful! TX: ${txHash}`))
+        .catch((err: any) => logger.error(`❌ Manual claim failed: ${err.message || err}`));
+      
+      res.json({ 
+        success: true, 
+        message: `Claim started for ${conditionId}! Check Railway logs for progress.` 
+      });
+    } catch (error: any) {
+      logger.error('Failed to start manual claim', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to start claim' });
+    }
+  });
+
   // Cash out all positions (market sell)
   app.post('/api/positions/cashout', async (req: Request, res: Response) => {
     try {

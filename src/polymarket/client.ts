@@ -986,38 +986,90 @@ export class PolymarketClient {
     const address = await this.wallet.getAddress();
     
     try {
-      // Try multiple API endpoints to find positions
-      const endpoints = [
-        // Profile API - most reliable for getting user positions
-        `https://polymarket.com/api/profile/${address.toLowerCase()}/positions`,
-        // Data API with different params
-        `https://data-api.polymarket.com/positions?user=${address.toLowerCase()}`,
-        // Gamma API events endpoint with user filter
-        `${GAMMA_API_URL}/events?user=${address.toLowerCase()}&closed=false`,
-      ];
-
-      for (const endpoint of endpoints) {
-        try {
-          logger.info(`Trying positions endpoint: ${endpoint}`);
-          const response = await fetch(endpoint, {
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'PolymarketBot/1.0'
-            }
+      // Try the profile-positions endpoint first (most accurate)
+      const profileUrl = `https://polymarket.com/api/profile/${address.toLowerCase()}/positions`;
+      logger.info(`Fetching positions from profile API: ${profileUrl}`);
+      
+      try {
+        const profileResponse = await fetch(profileUrl, {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+          }
+        });
+        
+        if (profileResponse.ok) {
+          const data: any = await profileResponse.json();
+          const positions = Array.isArray(data) ? data : (data?.positions || data?.data || []);
+          
+          // Filter positions with actual balance
+          const activePositions = positions.filter((p: any) => {
+            const size = parseFloat(p.size || p.amount || p.shares || '0');
+            return size > 0.001;
           });
           
-          if (response.ok) {
-            const data: any = await response.json();
-            // Handle different response formats
-            const positions = Array.isArray(data) ? data : (data?.positions || data?.data || []);
+          if (activePositions.length > 0) {
+            logger.info(`Found ${activePositions.length} active positions from profile API`);
+            return activePositions;
+          }
+        }
+      } catch (e: any) {
+        logger.debug(`Profile API failed: ${e.message}`);
+      }
+
+      // Try CLOB API endpoint for balances
+      const clobBalancesUrl = `https://clob.polymarket.com/balances/${address.toLowerCase()}`;
+      logger.info(`Fetching balances from CLOB API: ${clobBalancesUrl}`);
+      
+      try {
+        const clobResponse = await fetch(clobBalancesUrl, {
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        if (clobResponse.ok) {
+          const balances: any = await clobResponse.json();
+          logger.info(`CLOB balances response: ${JSON.stringify(balances)}`);
+          
+          // Convert balances to position format if we get any
+          if (balances && typeof balances === 'object') {
+            const positions = Object.entries(balances)
+              .filter(([_, balance]) => parseFloat(balance as string) > 0.001)
+              .map(([tokenId, balance]) => ({
+                tokenId,
+                size: balance,
+                conditionId: tokenId // Will need to look up actual condition
+              }));
+            
             if (positions.length > 0) {
-              logger.info(`Found ${positions.length} positions from ${endpoint}`);
+              logger.info(`Found ${positions.length} positions from CLOB balances`);
               return positions;
             }
           }
-        } catch (e: any) {
-          logger.debug(`Endpoint ${endpoint} failed: ${e.message}`);
         }
+      } catch (e: any) {
+        logger.debug(`CLOB balances failed: ${e.message}`);
+      }
+
+      // Try data-api as last resort
+      const dataApiUrl = `https://data-api.polymarket.com/positions?user=${address.toLowerCase()}`;
+      logger.info(`Trying data API: ${dataApiUrl}`);
+      
+      const response = await fetch(dataApiUrl, {
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const data: any = await response.json();
+        const allPositions = Array.isArray(data) ? data : (data?.positions || data?.data || []);
+        
+        // Filter out positions with 0 balance
+        const activePositions = allPositions.filter((p: any) => {
+          const size = parseFloat(p.size || p.amount || p.shares || '0');
+          return size > 0.001;
+        });
+        
+        logger.info(`Found ${allPositions.length} total, ${activePositions.length} active from data API`);
+        return activePositions;
       }
       
       logger.warn(`No positions found from any API for ${address}`);

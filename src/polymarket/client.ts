@@ -1300,6 +1300,112 @@ export class PolymarketClient {
     logger.info(`Claim complete: ${results.success} succeeded, ${results.failed} failed`);
     return results;
   }
+
+  /**
+   * Get all resolved markets from hourly crypto series
+   */
+  async getResolvedHourlyMarkets(daysBack: number = 7): Promise<any[]> {
+    const seriesSlugs = ['btc-up-or-down-hourly', 'eth-up-or-down-hourly'];
+    const allMarkets: any[] = [];
+    
+    for (const seriesSlug of seriesSlugs) {
+      try {
+        const url = `${GAMMA_API_URL}/events?series_slug=${seriesSlug}&closed=true&limit=200`;
+        logger.info(`Fetching resolved markets from: ${url}`);
+        
+        const response = await fetch(url);
+        if (!response.ok) continue;
+        
+        const events = await response.json() as any[];
+        
+        // Filter to only include markets resolved in the last X days
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+        
+        for (const event of events) {
+          if (event.markets && event.markets.length > 0) {
+            const market = event.markets[0];
+            const closedTime = new Date(market.closedTime || event.closedTime);
+            
+            if (closedTime > cutoffDate && market.conditionId) {
+              allMarkets.push({
+                title: market.question || event.title,
+                conditionId: market.conditionId,
+                closedTime: closedTime.toISOString(),
+                negRisk: market.negRisk || false,
+                outcome: market.outcomePrices // To determine winner
+              });
+            }
+          }
+        }
+      } catch (e: any) {
+        logger.error(`Failed to fetch series ${seriesSlug}: ${e.message}`);
+      }
+    }
+    
+    logger.info(`Found ${allMarkets.length} resolved hourly crypto markets from last ${daysBack} days`);
+    return allMarkets;
+  }
+
+  /**
+   * Attempt to claim all resolved hourly crypto positions (brute force)
+   * This tries to redeem every resolved market - if you don't have a position, it will fail gracefully
+   */
+  async claimAllResolvedHourly(daysBack: number = 7): Promise<{ attempted: number; success: number; failed: number; skipped: number }> {
+    logger.info(`=== CLAIMING ALL RESOLVED HOURLY MARKETS (last ${daysBack} days) ===`);
+    
+    const resolvedMarkets = await this.getResolvedHourlyMarkets(daysBack);
+    
+    if (resolvedMarkets.length === 0) {
+      logger.info('No resolved markets found');
+      return { attempted: 0, success: 0, failed: 0, skipped: 0 };
+    }
+
+    logger.info(`Found ${resolvedMarkets.length} resolved markets to attempt...`);
+    
+    const results = { attempted: 0, success: 0, failed: 0, skipped: 0 };
+    
+    for (const market of resolvedMarkets) {
+      results.attempted++;
+      
+      try {
+        logger.info(`[${results.attempted}/${resolvedMarkets.length}] Attempting: ${market.title}`);
+        logger.info(`  Condition ID: ${market.conditionId}`);
+        
+        const txHash = await this.redeemPosition(market.conditionId, market.negRisk);
+        results.success++;
+        logger.info(`  ✅ SUCCESS! TX: ${txHash}`);
+        
+        // Wait between successful redemptions
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      } catch (error: any) {
+        const errorMsg = error.message || String(error);
+        
+        // Check if this is a "no position" error (expected for markets where user didn't trade)
+        if (errorMsg.includes('execution reverted') || 
+            errorMsg.includes('insufficient') || 
+            errorMsg.includes('nothing to redeem') ||
+            errorMsg.includes('already redeemed')) {
+          results.skipped++;
+          logger.info(`  ⏭️ Skipped (no position or already claimed)`);
+        } else {
+          results.failed++;
+          logger.warn(`  ❌ Failed: ${errorMsg}`);
+        }
+        
+        // Small delay even on failures
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    logger.info(`=== CLAIM ALL COMPLETE ===`);
+    logger.info(`Attempted: ${results.attempted}`);
+    logger.info(`Success: ${results.success}`);
+    logger.info(`Skipped (no position): ${results.skipped}`);
+    logger.info(`Failed: ${results.failed}`);
+    
+    return results;
+  }
 }
 
 // Singleton instance

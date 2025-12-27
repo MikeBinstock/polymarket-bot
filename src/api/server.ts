@@ -522,6 +522,40 @@ export function createServer(
     }
   });
 
+  // Claim all resolved hourly crypto positions (brute force)
+  app.post('/api/positions/claim-all-hourly', async (req: Request, res: Response) => {
+    try {
+      const client = (scheduler as any).client as import('../polymarket/client').PolymarketClient;
+      const { daysBack = 7 } = req.body;
+      
+      if (client.isReadOnly()) {
+        res.status(400).json({ success: false, error: 'No wallet configured' });
+        return;
+      }
+
+      logger.info(`🔄 Starting claim of all resolved hourly markets (last ${daysBack} days)...`);
+      
+      // Run in background
+      client.claimAllResolvedHourly(daysBack)
+        .then((result) => {
+          logger.info(`🎉 Bulk claim complete!`);
+          logger.info(`   Attempted: ${result.attempted}`);
+          logger.info(`   Success: ${result.success}`);
+          logger.info(`   Skipped: ${result.skipped}`);
+          logger.info(`   Failed: ${result.failed}`);
+        })
+        .catch((err: any) => logger.error('❌ Bulk claim failed:', err.message || err));
+      
+      res.json({ 
+        success: true, 
+        message: `Bulk claim started for last ${daysBack} days! This will attempt to claim ALL resolved hourly crypto markets. Check Railway logs for progress.` 
+      });
+    } catch (error: any) {
+      logger.error('Failed to start bulk claim', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to start bulk claim' });
+    }
+  });
+
   // Cash out all positions (market sell)
   app.post('/api/positions/cashout', async (req: Request, res: Response) => {
     try {

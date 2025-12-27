@@ -346,11 +346,13 @@ export class TradingScheduler {
    */
   async forceScan(crypto?: CryptoType): Promise<{ markets: number; opportunities: number; trades: number }> {
     if (this.isRunning) {
-      throw new Error('Scan already in progress');
+      logger.warn('Force scan requested but a scan is already in progress');
+      throw new Error('Scan already in progress. Please wait a moment and try again.');
     }
 
     this.isRunning = true;
     this.lastScanTime = new Date();
+    logger.info(`Force scan starting, isRunning=${this.isRunning}`);
     
     const cryptosToScan = crypto ? [crypto] : SUPPORTED_CRYPTOS;
     logger.info(`Starting forced scan for: ${cryptosToScan.join(', ')}...`);

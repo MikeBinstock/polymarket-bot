@@ -12,7 +12,23 @@ export interface Config {
   port: number;
   nodeEnv: string;
   dataDir: string;
+  polygonRpcUrl: string;
 }
+
+// Polygon Smart Contract Addresses (from Polymarket docs)
+export const POLYGON_CONTRACTS = {
+  // Main trading contracts
+  CTF_EXCHANGE: '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E',           // Binary YES/NO markets
+  NEGRISK_CTF_EXCHANGE: '0xC5d563A36AE78145C45a50134d48A1215220f80a',    // Multi-outcome markets
+  
+  // Token contracts
+  CTF: '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045',                     // Conditional Tokens Framework
+  NEGRISK_ADAPTER: '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296',         // Multi-outcome adapter
+  USDC: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',                    // USDC.e collateral
+  
+  // Oracle
+  UMA_ORACLE: '0x6A9D222616C90FcA5754cd1333cFD9b7fb6a4F74',              // Market resolution oracle
+} as const;
 
 function getEnvVar(name: string, defaultValue?: string): string {
   const value = process.env[name] || defaultValue;
@@ -47,6 +63,8 @@ export function loadConfig(): Config {
     port: getEnvNumber('PORT', 3000),
     nodeEnv: getEnvVar('NODE_ENV', 'development'),
     dataDir: path.join(process.cwd(), 'data'),
+    // Polygon RPC - default to public endpoint (rate limited, add your own for production)
+    polygonRpcUrl: getEnvVar('POLYGON_RPC_URL', 'https://polygon-rpc.com'),
   };
 }
 

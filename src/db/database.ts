@@ -167,11 +167,77 @@ export class TradeDatabase {
         up_order_id = @up_order_id,
         down_order_id = @down_order_id,
         pnl = @pnl,
-        resolved_at = @resolved_at
+        resolved_at = @resolved_at,
+        exit_price = @exit_price,
+        resolved_price = @resolved_price
       WHERE id = @id
     `);
-    stmt.run(trade);
+    stmt.run({
+      ...trade,
+      exit_price: trade.exit_price ?? null,
+      resolved_price: trade.resolved_price ?? null,
+    });
     logger.debug(`Trade updated: ${trade.id}`);
+  }
+
+  /**
+   * Update trade with on-chain verified exit price
+   * Called when a trade is sold/cashed out
+   */
+  updateTradeExitPrice(tradeId: string, exitPrice: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE trades SET exit_price = ? WHERE id = ?
+    `);
+    stmt.run(exitPrice, tradeId);
+    logger.info(`Trade ${tradeId} exit price updated: $${exitPrice.toFixed(4)}`);
+  }
+
+  /**
+   * Update trade with on-chain resolved price
+   * Called when a market resolves (1.00 if won, 0.00 if lost)
+   */
+  updateTradeResolvedPrice(tradeId: string, resolvedPrice: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE trades SET resolved_price = ? WHERE id = ?
+    `);
+    stmt.run(resolvedPrice, tradeId);
+    logger.info(`Trade ${tradeId} resolved price updated: $${resolvedPrice.toFixed(2)}`);
+  }
+
+  /**
+   * Update trade with both exit and resolved prices
+   * For on-chain verification
+   */
+  updateTradeOnChainData(
+    tradeId: string, 
+    data: { exitPrice?: number; resolvedPrice?: number; pnl?: number; status?: string }
+  ): void {
+    const updates: string[] = [];
+    const params: any = { id: tradeId };
+
+    if (data.exitPrice !== undefined) {
+      updates.push('exit_price = @exitPrice');
+      params.exitPrice = data.exitPrice;
+    }
+    if (data.resolvedPrice !== undefined) {
+      updates.push('resolved_price = @resolvedPrice');
+      params.resolvedPrice = data.resolvedPrice;
+    }
+    if (data.pnl !== undefined) {
+      updates.push('pnl = @pnl');
+      params.pnl = data.pnl;
+    }
+    if (data.status !== undefined) {
+      updates.push('status = @status');
+      params.status = data.status;
+    }
+
+    if (updates.length === 0) return;
+
+    const sql = `UPDATE trades SET ${updates.join(', ')} WHERE id = @id`;
+    const stmt = this.db.prepare(sql);
+    stmt.run(params);
+    logger.info(`Trade ${tradeId} on-chain data updated`);
   }
 
   getTrade(id: string): Trade | null {

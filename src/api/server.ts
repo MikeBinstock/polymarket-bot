@@ -8,6 +8,7 @@ import { WeatherScheduler } from '../weather';
 import { createLogger } from '../utils/logger';
 import { ApiResponse, DashboardStats, BotStatus } from '../types';
 import { CryptoType, CRYPTO_DISPLAY_NAMES } from '../polymarket/client';
+import { getBlockchainVerifier, BlockchainVerifier } from '../blockchain/verifier';
 
 const logger = createLogger('API');
 
@@ -793,6 +794,207 @@ export function createServer(
     } catch (error) {
       logger.error('Failed to update weather settings', error);
       res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  });
+
+  // ==========================================
+  // BLOCKCHAIN VERIFICATION ENDPOINTS
+  // ==========================================
+
+  // Initialize blockchain verifier (lazy)
+  let blockchainVerifier: BlockchainVerifier | null = null;
+  const getVerifier = () => {
+    if (!blockchainVerifier) {
+      blockchainVerifier = getBlockchainVerifier(config.polygonRpcUrl);
+    }
+    return blockchainVerifier;
+  };
+
+  // Get blockchain connection status
+  app.get('/api/blockchain/status', async (req: Request, res: Response) => {
+    try {
+      const verifier = getVerifier();
+      const connected = await verifier.connect();
+      const blockInfo = await verifier.getBlockInfo();
+      
+      res.json({
+        success: true,
+        data: {
+          connected,
+          network: 'Polygon',
+          chainId: 137,
+          rpcUrl: config.polygonRpcUrl.replace(/\/\/.*@/, '//***@'), // Hide credentials
+          currentBlock: blockInfo?.blockNumber || null,
+          blockTimestamp: blockInfo?.timestamp || null,
+        }
+      });
+    } catch (error: any) {
+      logger.error('Failed to get blockchain status', error);
+      res.status(500).json({ success: false, error: error.message || 'Connection failed' });
+    }
+  });
+
+  // Verify a trade by transaction hash
+  app.get('/api/blockchain/verify/:txHash', async (req: Request, res: Response) => {
+    try {
+      const { txHash } = req.params;
+      
+      if (!txHash || !txHash.startsWith('0x')) {
+        res.status(400).json({ success: false, error: 'Invalid transaction hash' });
+        return;
+      }
+      
+      const verifier = getVerifier();
+      await verifier.connect();
+      
+      const verification = await verifier.verifyTrade(txHash);
+      
+      if (!verification) {
+        res.status(404).json({ success: false, error: 'Transaction not found' });
+        return;
+      }
+      
+      res.json({ success: true, data: verification });
+    } catch (error: any) {
+      logger.error('Failed to verify trade', error);
+      res.status(500).json({ success: false, error: error.message || 'Verification failed' });
+    }
+  });
+
+  // Verify and update a trade's on-chain data
+  app.post('/api/blockchain/verify-trade/:tradeId', async (req: Request, res: Response) => {
+    try {
+      const { tradeId } = req.params;
+      const { txHash } = req.body;
+      
+      // Get the trade
+      const trade = db.getTrade(tradeId);
+      if (!trade) {
+        res.status(404).json({ success: false, error: 'Trade not found' });
+        return;
+      }
+      
+      if (!txHash || !txHash.startsWith('0x')) {
+        res.status(400).json({ success: false, error: 'Invalid transaction hash' });
+        return;
+      }
+      
+      const verifier = getVerifier();
+      await verifier.connect();
+      
+      const verification = await verifier.verifyTrade(txHash);
+      
+      if (!verification || !verification.verified) {
+        res.status(404).json({ success: false, error: 'Could not verify transaction' });
+        return;
+      }
+      
+      // Update trade with verified data
+      db.updateTradeOnChainData(tradeId, {
+        exitPrice: verification.fillPrice,
+      });
+      
+      const updatedTrade = db.getTrade(tradeId);
+      
+      res.json({
+        success: true,
+        data: {
+          trade: updatedTrade,
+          verification,
+        }
+      });
+    } catch (error: any) {
+      logger.error('Failed to verify and update trade', error);
+      res.status(500).json({ success: false, error: error.message || 'Verification failed' });
+    }
+  });
+
+  // Check market resolution status
+  app.get('/api/blockchain/resolution/:conditionId', async (req: Request, res: Response) => {
+    try {
+      const { conditionId } = req.params;
+      
+      const verifier = getVerifier();
+      await verifier.connect();
+      
+      const resolution = await verifier.checkMarketResolution(conditionId);
+      
+      res.json({ success: true, data: resolution });
+    } catch (error: any) {
+      logger.error('Failed to check market resolution', error);
+      res.status(500).json({ success: false, error: error.message || 'Resolution check failed' });
+    }
+  });
+
+  // Update trade with resolved price (after market settlement)
+  app.post('/api/blockchain/resolve-trade/:tradeId', async (req: Request, res: Response) => {
+    try {
+      const { tradeId } = req.params;
+      const { won } = req.body; // Manual override: true if won, false if lost
+      
+      const trade = db.getTrade(tradeId);
+      if (!trade) {
+        res.status(404).json({ success: false, error: 'Trade not found' });
+        return;
+      }
+      
+      // Resolved price is 1.00 if won, 0.00 if lost
+      const resolvedPrice = won ? 1.00 : 0.00;
+      
+      // Calculate P&L
+      const entryPrice = trade.side === 'up' ? trade.up_price : trade.down_price;
+      const size = trade.side === 'up' ? trade.up_size : trade.down_size;
+      const pnl = won 
+        ? (resolvedPrice - entryPrice) * size  // Won: profit is (1 - entry) * shares
+        : -entryPrice * size;                   // Lost: loss is entry * shares
+      
+      db.updateTradeOnChainData(tradeId, {
+        resolvedPrice,
+        pnl,
+        status: 'resolved',
+      });
+      
+      const updatedTrade = db.getTrade(tradeId);
+      
+      logger.info(`Trade ${tradeId} resolved: ${won ? 'WON' : 'LOST'}, P&L: $${pnl.toFixed(2)}`);
+      
+      res.json({
+        success: true,
+        data: {
+          trade: updatedTrade,
+          resolved: true,
+          won,
+          pnl,
+        }
+      });
+    } catch (error: any) {
+      logger.error('Failed to resolve trade', error);
+      res.status(500).json({ success: false, error: error.message || 'Resolution failed' });
+    }
+  });
+
+  // Get recent on-chain trades for a token
+  app.get('/api/blockchain/trades/:tokenId', async (req: Request, res: Response) => {
+    try {
+      const { tokenId } = req.params;
+      const blocks = parseInt(req.query.blocks as string) || 10000;
+      
+      const verifier = getVerifier();
+      await verifier.connect();
+      
+      const trades = await verifier.getRecentTrades(tokenId, -blocks);
+      
+      res.json({
+        success: true,
+        data: {
+          tokenId,
+          trades,
+          count: trades.length,
+        }
+      });
+    } catch (error: any) {
+      logger.error('Failed to get recent trades', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to fetch trades' });
     }
   });
 

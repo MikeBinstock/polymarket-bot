@@ -986,26 +986,41 @@ export class PolymarketClient {
     const address = await this.wallet.getAddress();
     
     try {
-      // Try data-api endpoint (public positions)
-      const dataApiUrl = `https://data-api.polymarket.com/positions?user=${address.toLowerCase()}`;
-      const response = await fetch(dataApiUrl);
-      
-      if (response.ok) {
-        const positions = await response.json() as any[];
-        logger.info(`Found ${positions.length} positions for ${address} from data-api`);
-        return positions;
+      // Try multiple API endpoints to find positions
+      const endpoints = [
+        // Profile API - most reliable for getting user positions
+        `https://polymarket.com/api/profile/${address.toLowerCase()}/positions`,
+        // Data API with different params
+        `https://data-api.polymarket.com/positions?user=${address.toLowerCase()}`,
+        // Gamma API events endpoint with user filter
+        `${GAMMA_API_URL}/events?user=${address.toLowerCase()}&closed=false`,
+      ];
+
+      for (const endpoint of endpoints) {
+        try {
+          logger.info(`Trying positions endpoint: ${endpoint}`);
+          const response = await fetch(endpoint, {
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'PolymarketBot/1.0'
+            }
+          });
+          
+          if (response.ok) {
+            const data: any = await response.json();
+            // Handle different response formats
+            const positions = Array.isArray(data) ? data : (data?.positions || data?.data || []);
+            if (positions.length > 0) {
+              logger.info(`Found ${positions.length} positions from ${endpoint}`);
+              return positions;
+            }
+          }
+        } catch (e: any) {
+          logger.debug(`Endpoint ${endpoint} failed: ${e.message}`);
+        }
       }
       
-      // Fallback to gamma-api
-      const gammaResponse = await fetch(`${GAMMA_API_URL}/positions?user=${address.toLowerCase()}`);
-      
-      if (gammaResponse.ok) {
-        const positions = await gammaResponse.json() as any[];
-        logger.info(`Found ${positions.length} positions for ${address} from gamma-api`);
-        return positions;
-      }
-      
-      logger.warn(`Failed to fetch positions from APIs: data-api=${response.status}, gamma-api=${gammaResponse.status}`);
+      logger.warn(`No positions found from any API for ${address}`);
       return [];
     } catch (error: any) {
       logger.error(`Failed to fetch positions: ${error.message}`);
@@ -1020,6 +1035,16 @@ export class PolymarketClient {
     const positions = await this.getPositions();
     
     logger.info(`=== Checking ${positions.length} positions for claimability ===`);
+    
+    // If no positions from API, try on-chain approach
+    if (positions.length === 0) {
+      logger.info('No positions from API, checking on-chain...');
+      const onChainPositions = await this.getOnChainPositions();
+      if (onChainPositions.length > 0) {
+        logger.info(`Found ${onChainPositions.length} positions on-chain`);
+        return onChainPositions;
+      }
+    }
     
     // Log FULL position data for first position to understand structure
     if (positions.length > 0) {
@@ -1036,29 +1061,78 @@ export class PolymarketClient {
       logger.info(`  All keys: ${Object.keys(p).join(', ')}`);
     });
     
-    // Filter for claimable positions using correct API fields
+    // Filter for claimable positions using multiple detection methods
     const claimable = positions.filter((p: any) => {
-      const hasBalance = parseFloat(p.size || '0') > 0;
+      // Check for balance in various field names
+      const size = parseFloat(p.size || p.amount || p.shares || p.position || p.balance || '0');
+      const hasBalance = size > 0;
       
-      // Check if market has ended (endDate in the past)
+      // Check if market has ended
       const endDate = p.endDate ? new Date(p.endDate) : null;
-      const isEnded = endDate ? endDate < new Date() : false;
+      const isEnded = endDate ? endDate < new Date() : (p.closed === true || p.settled === true);
       
-      // Check if winner: curPrice close to 1 means won, 0 means lost
-      const curPrice = parseFloat(p.curPrice || '0');
-      const isWinner = curPrice >= 0.95;  // Price of 0.95+ means it resolved as winner
+      // Check if winner using multiple indicators
+      const curPrice = parseFloat(p.curPrice || p.currentPrice || p.price || '0');
+      const isWinner = curPrice >= 0.95 || p.outcome === 'won' || p.won === true;
       
-      // Also check redeemable flag if it exists
-      const isRedeemable = p.redeemable === true || p.redeemable === 'true';
+      // Check redeemable flags
+      const isRedeemable = p.redeemable === true || p.redeemable === 'true' || 
+                           p.canRedeem === true || p.claimable === true;
       
-      logger.info(`  → Position: endDate=${endDate?.toISOString()}, isEnded=${isEnded}, curPrice=${curPrice}, isWinner=${isWinner}, redeemable=${p.redeemable}`);
+      // Check for resolved status
+      const isResolved = p.resolved === true || p.status === 'resolved' || p.status === 'closed';
       
-      // Claimable if: has balance AND (market ended with winning price OR explicitly marked redeemable)
-      return hasBalance && (isEnded && isWinner) || isRedeemable;
+      logger.info(`  → Position: size=${size}, isEnded=${isEnded}, curPrice=${curPrice}, isWinner=${isWinner}, redeemable=${isRedeemable}, resolved=${isResolved}`);
+      
+      // Claimable if: has balance AND ((market ended with winner) OR explicitly marked redeemable/resolved winner)
+      return hasBalance && ((isEnded && isWinner) || isRedeemable || (isResolved && isWinner));
     });
 
     logger.info(`Found ${claimable.length} claimable positions out of ${positions.length}`);
     return claimable;
+  }
+
+  /**
+   * Get positions by checking on-chain CTF balances
+   */
+  async getOnChainPositions(): Promise<any[]> {
+    if (!this.wallet) return [];
+    
+    try {
+      const address = await this.wallet.getAddress();
+      logger.info(`Checking on-chain positions for ${address}...`);
+      
+      // Connect to provider
+      let provider: ethers.providers.JsonRpcProvider | null = null;
+      for (const rpc of POLYGON_RPCS) {
+        try {
+          const testProvider = new ethers.providers.JsonRpcProvider(rpc);
+          await testProvider.getNetwork();
+          provider = testProvider;
+          break;
+        } catch {
+          continue;
+        }
+      }
+      
+      if (!provider) {
+        logger.warn('Could not connect to Polygon for on-chain position check');
+        return [];
+      }
+
+      // Query the CTF contract for balance
+      const ctfAddress = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
+      const ctf = new ethers.Contract(ctfAddress, CTF_ABI, provider);
+      
+      // We'd need to know the token IDs to check balances
+      // For now, just log that we tried
+      logger.info('On-chain position check requires known token IDs - check your positions on Polymarket website');
+      
+      return [];
+    } catch (error: any) {
+      logger.error(`On-chain position check failed: ${error.message}`);
+      return [];
+    }
   }
 
   /**

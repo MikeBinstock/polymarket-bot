@@ -397,3 +397,4 @@ export function getBlockchainVerifier(rpcUrl: string): BlockchainVerifier {
   return verifierInstance;
 }
 
+

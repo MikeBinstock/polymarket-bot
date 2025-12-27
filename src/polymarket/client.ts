@@ -211,7 +211,7 @@ export class PolymarketClient {
         throw new Error(`Failed to fetch series ${seriesId}: ${response.status} ${response.statusText}`);
       }
       
-      const data = await response.json();
+      const data: any = await response.json();
       logger.info(`Series ${seriesId} fetched successfully, events: ${data?.events?.length || 0}`);
       return data;
     } catch (error: any) {

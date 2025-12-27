@@ -201,14 +201,23 @@ export class PolymarketClient {
   async getSeries(seriesId: string): Promise<any> {
     try {
       logger.info(`Fetching series ${seriesId}...`);
-      const response = await fetch(`${GAMMA_API_URL}/series/${seriesId}`);
+      const url = `${GAMMA_API_URL}/series/${seriesId}`;
+      
+      const response = await fetch(url);
+      
       if (!response.ok) {
-        throw new Error(`Failed to fetch series: ${response.statusText}`);
+        const errorText = await response.text().catch(() => 'No response body');
+        logger.error(`Series ${seriesId} fetch failed: ${response.status} ${response.statusText} - ${errorText}`);
+        throw new Error(`Failed to fetch series ${seriesId}: ${response.status} ${response.statusText}`);
       }
-      return await response.json();
-    } catch (error) {
-      logger.error(`Failed to fetch series ${seriesId}`, error);
-      throw error;
+      
+      const data = await response.json();
+      logger.info(`Series ${seriesId} fetched successfully, events: ${data?.events?.length || 0}`);
+      return data;
+    } catch (error: any) {
+      const errorMsg = error?.message || error?.toString() || JSON.stringify(error) || 'Unknown error';
+      logger.error(`Failed to fetch series ${seriesId}: ${errorMsg}`);
+      throw new Error(`Series fetch failed for ${seriesId}: ${errorMsg}`);
     }
   }
 
@@ -238,8 +247,16 @@ export class PolymarketClient {
         throw new Error(`Unknown crypto type: ${crypto}`);
       }
       
+      logger.info(`Fetching ${crypto} events from series ${seriesId}...`);
       const series = await this.getSeries(seriesId);
+      
+      if (!series) {
+        logger.warn(`No series data returned for ${crypto} (series ${seriesId})`);
+        return [];
+      }
+      
       const events = series.events || [];
+      logger.info(`Series ${seriesId} has ${events.length} total events`);
       
       // Filter for non-closed events that end in the future
       const now = new Date();
@@ -256,9 +273,13 @@ export class PolymarketClient {
 
       logger.info(`Found ${activeEvents.length} active hourly ${crypto} events`);
       return activeEvents;
-    } catch (error) {
-      logger.error(`Failed to fetch hourly ${crypto} events`, error);
-      throw error;
+    } catch (error: any) {
+      const errorMsg = error?.message || error?.toString() || JSON.stringify(error) || 'Unknown error';
+      logger.error(`Failed to fetch hourly ${crypto} events: ${errorMsg}`);
+      if (error?.stack) {
+        logger.error(`Stack: ${error.stack}`);
+      }
+      throw new Error(`Failed to fetch ${crypto} events: ${errorMsg}`);
     }
   }
 

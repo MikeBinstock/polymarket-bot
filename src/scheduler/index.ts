@@ -49,6 +49,13 @@ export class TradingScheduler {
   private autoClaimEnabled = true;
   private volatilityFilterEnabled = true;
   
+  // Stop-loss configuration
+  private stopLossEnabled = false;
+  private stopLossThreshold = 0.70; // 70 cents default
+  private stopLossInterval: NodeJS.Timeout | null = null;
+  private stopLossCheckIntervalMs = 30000; // Check every 30 seconds
+  private isStopLossRunning = false;
+  
   // Trading window: only trade in last 15 minutes of hour (minutes 45-59)
   private tradingWindowStart = 45;  // Minute 45
   private tradingWindowEnd = 59;    // Minute 59
@@ -96,6 +103,165 @@ export class TradingScheduler {
    */
   getVolatilityConfig(): VolatilityConfig {
     return this.volatilityFilter.getConfig();
+  }
+
+  // ==========================================
+  // STOP-LOSS FUNCTIONS
+  // ==========================================
+
+  /**
+   * Enable or disable stop-loss monitoring
+   */
+  setStopLossEnabled(enabled: boolean): void {
+    this.stopLossEnabled = enabled;
+    logger.info(`🛑 Stop-loss ${enabled ? 'ENABLED' : 'DISABLED'} (threshold: ${(this.stopLossThreshold * 100).toFixed(0)}¢)`);
+    
+    if (enabled && !this.stopLossInterval) {
+      this.startStopLossMonitor();
+    } else if (!enabled && this.stopLossInterval) {
+      this.stopStopLossMonitor();
+    }
+  }
+
+  /**
+   * Update stop-loss threshold (in decimal, e.g., 0.70 for 70 cents)
+   */
+  setStopLossThreshold(threshold: number): void {
+    this.stopLossThreshold = threshold;
+    logger.info(`🛑 Stop-loss threshold set to ${(threshold * 100).toFixed(0)}¢`);
+  }
+
+  /**
+   * Get current stop-loss config
+   */
+  getStopLossConfig(): { enabled: boolean; threshold: number } {
+    return {
+      enabled: this.stopLossEnabled,
+      threshold: this.stopLossThreshold,
+    };
+  }
+
+  /**
+   * Start the stop-loss monitoring interval
+   */
+  private startStopLossMonitor(): void {
+    if (this.stopLossInterval) {
+      clearInterval(this.stopLossInterval);
+    }
+    
+    logger.info(`🛑 Starting stop-loss monitor (checking every ${this.stopLossCheckIntervalMs / 1000}s)`);
+    
+    // Run immediately once
+    this.checkStopLoss();
+    
+    // Then run on interval
+    this.stopLossInterval = setInterval(() => {
+      this.checkStopLoss();
+    }, this.stopLossCheckIntervalMs);
+  }
+
+  /**
+   * Stop the stop-loss monitoring interval
+   */
+  private stopStopLossMonitor(): void {
+    if (this.stopLossInterval) {
+      clearInterval(this.stopLossInterval);
+      this.stopLossInterval = null;
+      logger.info('🛑 Stop-loss monitor stopped');
+    }
+  }
+
+  /**
+   * Check all open positions and trigger stop-loss if price drops below threshold
+   */
+  private async checkStopLoss(): Promise<void> {
+    if (!this.stopLossEnabled || this.isStopLossRunning) {
+      return;
+    }
+
+    this.isStopLossRunning = true;
+
+    try {
+      // Get all open positions
+      const positions = await this.client.getPositions();
+      const openPositions = positions.filter((p: any) => {
+        const size = parseFloat(p.size || p.amount || p.shares || '0');
+        return size > 0.001 && !p.resolved && !p.closed;
+      });
+
+      if (openPositions.length === 0) {
+        return;
+      }
+
+      logger.debug(`🛑 Checking ${openPositions.length} positions for stop-loss...`);
+
+      for (const position of openPositions) {
+        const tokenId = position.asset || position.tokenId;
+        const size = parseFloat(position.size || position.amount || position.shares || '0');
+        const currentPrice = parseFloat(position.curPrice || position.currentPrice || position.price || '0');
+        const title = position.title || position.market?.question || tokenId?.substring(0, 20) || 'Unknown';
+
+        if (!tokenId || size <= 0) {
+          continue;
+        }
+
+        // Check if current price is below stop-loss threshold
+        if (currentPrice > 0 && currentPrice < this.stopLossThreshold) {
+          logger.warn(`🛑 STOP-LOSS TRIGGERED for ${title}`);
+          logger.warn(`   Current price: ${(currentPrice * 100).toFixed(1)}¢ < Threshold: ${(this.stopLossThreshold * 100).toFixed(0)}¢`);
+          logger.warn(`   Selling ${size.toFixed(2)} shares...`);
+
+          try {
+            const result = await this.client.placeSellOrder(tokenId, size, true);
+            logger.info(`🛑 STOP-LOSS SOLD: ${title}`);
+            logger.info(`   Result: ${JSON.stringify(result)}`);
+            
+            // Record in database
+            this.db.recordScan(0, 0, 0); // Just to trigger activity
+            
+          } catch (sellError: any) {
+            logger.error(`🛑 Stop-loss sell FAILED for ${title}: ${sellError.message}`);
+          }
+
+          // Small delay between sells
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    } catch (error: any) {
+      logger.error(`🛑 Stop-loss check failed: ${error.message}`);
+    } finally {
+      this.isStopLossRunning = false;
+    }
+  }
+
+  /**
+   * Manually trigger a stop-loss check
+   */
+  async triggerStopLossCheck(): Promise<{ checked: number; sold: number }> {
+    const positions = await this.client.getPositions();
+    const openPositions = positions.filter((p: any) => {
+      const size = parseFloat(p.size || p.amount || p.shares || '0');
+      return size > 0.001 && !p.resolved && !p.closed;
+    });
+
+    let sold = 0;
+
+    for (const position of openPositions) {
+      const tokenId = position.asset || position.tokenId;
+      const size = parseFloat(position.size || position.amount || position.shares || '0');
+      const currentPrice = parseFloat(position.curPrice || position.currentPrice || position.price || '0');
+
+      if (tokenId && size > 0 && currentPrice > 0 && currentPrice < this.stopLossThreshold) {
+        try {
+          await this.client.placeSellOrder(tokenId, size, true);
+          sold++;
+        } catch (e) {
+          // Continue with other positions
+        }
+      }
+    }
+
+    return { checked: openPositions.length, sold };
   }
 
   /**

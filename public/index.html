@@ -929,6 +929,27 @@
           <button class="btn btn-primary" onclick="saveVolatilityConfig()">Save Settings</button>
         </div>
       </div>
+
+      <div class="card">
+        <h2 class="card-title">Stop-Loss</h2>
+        <div class="form-row">
+          <div>
+            <div class="form-label">Enable Stop-Loss</div>
+            <div class="form-sublabel">Auto-sell when price drops below threshold</div>
+          </div>
+          <div id="stopLossToggle" class="toggle" onclick="toggleStopLoss()"></div>
+        </div>
+        <div class="input-row">
+          <div class="field">
+            <label class="field-label">Stop-Loss Threshold (¢)</label>
+            <input type="number" id="stopLossThresholdInput" class="field-input" value="70" min="10" max="90" step="5">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="saveStopLossConfig()">Save</button>
+          <button class="btn btn-danger" onclick="triggerStopLossCheck()">Check Now</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -939,6 +960,7 @@
     let password = localStorage.getItem('botPassword') || '';
     let isConnected = false;
     let volatilityConfig = { skipVolatileHours: true, checkRealTimeVolatility: true, checkSpread: true };
+    let stopLossConfig = { enabled: false, threshold: 0.70 };
 
     const passwordInput = document.getElementById('passwordInput');
     passwordInput.value = password;
@@ -1002,6 +1024,7 @@
         fetchAllCryptoMarkets();
         fetchAllCryptoSettings();
         fetchVolatilityConfig();
+        fetchStopLossConfig();
       } catch (e) { console.error(e); }
     }
 
@@ -1261,6 +1284,44 @@
       el.innerHTML = `${error ? '✕' : '✓'} ${msg}`;
       document.getElementById('toastArea').appendChild(el);
       setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 2500);
+    }
+
+    // Stop-Loss Functions
+    async function fetchStopLossConfig() {
+      try {
+        const { data } = await apiCall('/stoploss/config');
+        stopLossConfig = data;
+        document.getElementById('stopLossToggle').className = `toggle ${data.enabled ? 'on' : ''}`;
+        document.getElementById('stopLossThresholdInput').value = Math.round(data.threshold * 100);
+      } catch (e) { console.error(e); }
+    }
+
+    async function toggleStopLoss() {
+      try {
+        const toggle = document.getElementById('stopLossToggle');
+        const enabled = !toggle.classList.contains('on');
+        const { data } = await apiCall('/stoploss/toggle', 'POST', { enabled });
+        stopLossConfig = data;
+        toggle.className = `toggle ${data.enabled ? 'on' : ''}`;
+        toast(`Stop-loss ${data.enabled ? 'enabled' : 'disabled'}`);
+      } catch (e) { toast('Failed', true); }
+    }
+
+    async function saveStopLossConfig() {
+      try {
+        const threshold = parseInt(document.getElementById('stopLossThresholdInput').value);
+        const { data } = await apiCall('/stoploss/config', 'POST', { threshold });
+        stopLossConfig = data;
+        toast(`Stop-loss threshold set to ${Math.round(data.threshold * 100)}¢`);
+      } catch (e) { toast('Failed to save', true); }
+    }
+
+    async function triggerStopLossCheck() {
+      try {
+        toast('Checking positions...');
+        const { data } = await apiCall('/stoploss/check', 'POST');
+        toast(`Checked ${data.checked} positions, sold ${data.sold}`);
+      } catch (e) { toast('Check failed', true); }
     }
 
     setInterval(() => { if (isConnected) fetchStats(); }, 30000);

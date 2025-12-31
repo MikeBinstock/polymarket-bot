@@ -992,6 +992,66 @@ export function createServer(
     }
   });
 
+  // ==========================================
+  // STOP-LOSS ENDPOINTS
+  // ==========================================
+
+  // Get stop-loss config
+  app.get('/api/stoploss/config', (req: Request, res: Response) => {
+    try {
+      const config = scheduler.getStopLossConfig();
+      res.json({ success: true, data: config });
+    } catch (error: any) {
+      logger.error('Failed to get stop-loss config', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to get config' });
+    }
+  });
+
+  // Update stop-loss config
+  app.post('/api/stoploss/config', (req: Request, res: Response) => {
+    try {
+      const { enabled, threshold } = req.body;
+      
+      if (threshold !== undefined) {
+        // Convert from cents to decimal if needed (if > 1, assume cents)
+        const thresholdDecimal = threshold > 1 ? threshold / 100 : threshold;
+        scheduler.setStopLossThreshold(thresholdDecimal);
+      }
+      
+      if (enabled !== undefined) {
+        scheduler.setStopLossEnabled(enabled);
+      }
+      
+      res.json({ success: true, data: scheduler.getStopLossConfig() });
+    } catch (error: any) {
+      logger.error('Failed to update stop-loss config', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to update' });
+    }
+  });
+
+  // Toggle stop-loss on/off
+  app.post('/api/stoploss/toggle', (req: Request, res: Response) => {
+    try {
+      const { enabled } = req.body;
+      scheduler.setStopLossEnabled(enabled !== undefined ? enabled : true);
+      res.json({ success: true, data: scheduler.getStopLossConfig() });
+    } catch (error: any) {
+      logger.error('Failed to toggle stop-loss', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to toggle' });
+    }
+  });
+
+  // Manually trigger stop-loss check
+  app.post('/api/stoploss/check', async (req: Request, res: Response) => {
+    try {
+      const result = await scheduler.triggerStopLossCheck();
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error('Failed to trigger stop-loss check', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to check' });
+    }
+  });
+
   // Serve dashboard for all other routes
   app.get('*', (req: Request, res: Response) => {
     res.sendFile(path.join(__dirname, '../../public/index.html'));

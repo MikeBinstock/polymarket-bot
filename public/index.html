@@ -769,6 +769,16 @@
         </div>
       </div>
 
+      <!-- Cash Out -->
+      <div class="card">
+        <h2 class="card-title">Cash Out</h2>
+        <div class="claim-box">
+          <div class="claim-title">Market Sell All Positions</div>
+          <div class="form-sublabel" style="margin-bottom: 12px;">Instantly sell all open positions at current market price</div>
+          <button class="btn btn-danger" id="cashOutBtn">Cash Out All</button>
+        </div>
+      </div>
+
       <!-- Claim -->
       <div class="card">
         <h2 class="card-title">Claim Winnings</h2>
@@ -991,6 +1001,7 @@
     document.getElementById('approveSellBtn')?.addEventListener('click', approveSelling);
     document.getElementById('refreshTradesBtn')?.addEventListener('click', fetchStats);
     document.getElementById('refreshMarketsBtn')?.addEventListener('click', fetchLiveMarkets);
+    document.getElementById('cashOutBtn')?.addEventListener('click', cashOutAll);
     document.getElementById('bulkClaimBtn')?.addEventListener('click', bulkClaimAllHourly);
     document.getElementById('manualClaimBtn')?.addEventListener('click', manualClaimPosition);
     document.getElementById('exportCsvBtn')?.addEventListener('click', exportTradesToCsv);
@@ -1188,6 +1199,16 @@
           <td>${formatTime(t.created_at)}</td>
         </tr>`;
       }).join('')}</tbody></table></div>`;
+    }
+
+    async function cashOutAll() {
+      if (!confirm('CASH OUT: Sell ALL open positions at market price?')) return;
+      try {
+        toast('Cashing out...');
+        const { data } = await apiCall('/positions/cashout', 'POST');
+        toast(`Sold ${data.success} positions (${data.failed} failed)`);
+        fetchStats();
+      } catch (e) { toast('Cash out failed', true); }
     }
 
     async function bulkClaimAllHourly() {

@@ -51,6 +51,7 @@ export interface BotSettings {
   btc: CryptoSettings;
   eth: CryptoSettings;
   sol: CryptoSettings;
+  xrp: CryptoSettings;
   
   // Trading window
   tradingWindow: TradingWindowSettings;
@@ -95,6 +96,15 @@ export const FACTORY_DEFAULTS: BotSettings = {
   
   // SOL - disabled by default
   sol: {
+    enabled: false,
+    betSize: 90,
+    minPrice: 0.90,
+    maxPrice: 0.94,
+    autoClaimEnabled: false,
+  },
+  
+  // XRP - disabled by default (15-minute markets)
+  xrp: {
     enabled: false,
     betSize: 90,
     minPrice: 0.90,
@@ -154,6 +164,7 @@ export function mergeSettings(base: BotSettings, overrides: Partial<BotSettings>
   if (overrides.btc) Object.assign(result.btc, overrides.btc);
   if (overrides.eth) Object.assign(result.eth, overrides.eth);
   if (overrides.sol) Object.assign(result.sol, overrides.sol);
+  if (overrides.xrp) Object.assign(result.xrp, overrides.xrp);
   if (overrides.tradingWindow) Object.assign(result.tradingWindow, overrides.tradingWindow);
   if (overrides.volatility) Object.assign(result.volatility, overrides.volatility);
   if (overrides.stopLoss) Object.assign(result.stopLoss, overrides.stopLoss);

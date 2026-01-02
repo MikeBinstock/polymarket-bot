@@ -1417,11 +1417,12 @@ export class PolymarketClient {
    * Includes BTC, ETH, and SOL markets
    */
   async getResolvedHourlyMarkets(daysBack: number = 7): Promise<any[]> {
-    // Series IDs for hourly crypto markets (verified working)
+    // Series IDs for crypto markets (verified working)
     const CLAIM_SERIES_IDS: Record<string, string> = {
       'BTC': '10114',  // BTC Up or Down Hourly
       'ETH': '10117',  // ETH Up or Down Hourly
       'SOL': '10122',  // SOL Up or Down Hourly
+      'XRP': '10422',  // XRP Up or Down 15m
     };
     
     const allMarkets: any[] = [];

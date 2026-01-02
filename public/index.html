@@ -1014,6 +1014,20 @@
           </div>
           <div id="settingsEthClaimToggle" class="toggle"></div>
         </div>
+        <div class="form-row">
+          <div>
+            <div class="form-label">SOL Auto-Claim</div>
+            <div class="form-sublabel">Claim SOL market winnings</div>
+          </div>
+          <div id="settingsSolClaimToggle" class="toggle"></div>
+        </div>
+        <div class="form-row">
+          <div>
+            <div class="form-label">XRP Auto-Claim</div>
+            <div class="form-sublabel">Claim XRP market winnings (15m markets)</div>
+          </div>
+          <div id="settingsXrpClaimToggle" class="toggle"></div>
+        </div>
         <div class="input-row">
           <div class="field">
             <label class="field-label">Check Interval (minutes)</label>
@@ -1430,6 +1444,12 @@
       setValue('settingsEthMaxPrice', Math.round(s.eth.maxPrice * 100));
       setToggle('settingsEthClaimToggle', s.eth.autoClaimEnabled);
       
+      // SOL
+      setToggle('settingsSolClaimToggle', s.sol?.autoClaimEnabled || false);
+      
+      // XRP
+      setToggle('settingsXrpClaimToggle', s.xrp?.autoClaimEnabled || false);
+      
       // Trading Window
       setValue('settingsWindowStart', s.tradingWindow.startMinute);
       setValue('settingsWindowEnd', s.tradingWindow.endMinute);
@@ -1483,6 +1503,7 @@
       const toggleIds = [
         'settingsBtcToggle', 'settingsEthToggle', 
         'settingsBtcClaimToggle', 'settingsEthClaimToggle',
+        'settingsSolClaimToggle', 'settingsXrpClaimToggle',
         'settingsStopLossToggle', 'settingsAutoClaimToggle',
         'settingsVolatilityToggle', 'settingsVolatileHoursToggle',
         'settingsRealtimeToggle', 'settingsSpreadToggle'
@@ -1519,6 +1540,12 @@
           minPrice: getValue('settingsEthMinPrice') / 100,
           maxPrice: getValue('settingsEthMaxPrice') / 100,
           autoClaimEnabled: getToggle('settingsEthClaimToggle'),
+        },
+        sol: {
+          autoClaimEnabled: getToggle('settingsSolClaimToggle'),
+        },
+        xrp: {
+          autoClaimEnabled: getToggle('settingsXrpClaimToggle'),
         },
         tradingWindow: {
           startMinute: getValue('settingsWindowStart'),

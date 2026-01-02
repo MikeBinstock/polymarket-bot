@@ -1551,8 +1551,8 @@ export class PolymarketClient {
         results.success++;
         logger.info(`  ✅ SUCCESS! TX: ${txHash}`);
         
-        // Wait between successful redemptions
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Wait between successful redemptions (7s to avoid RPC rate limits)
+        await new Promise(resolve => setTimeout(resolve, 7000));
       } catch (error: any) {
         const errorMsg = error.message || String(error);
         

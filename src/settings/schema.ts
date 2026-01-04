@@ -36,6 +36,17 @@ export interface AutoClaimSettings {
   daysBack: number;
 }
 
+export interface SkipHoursRange {
+  enabled: boolean;
+  startHourUTC: number;  // 0-23
+  endHourUTC: number;    // 0-23
+}
+
+export interface SkipHoursSettings {
+  enabled: boolean;  // Master toggle
+  ranges: SkipHoursRange[];  // Up to 5 ranges
+}
+
 export interface AutoSellCryptoSettings {
   enabled: boolean;
 }
@@ -77,6 +88,9 @@ export interface BotSettings {
   
   // Volatility filter
   volatility: VolatilitySettings;
+  
+  // Skip hours (custom hour ranges to avoid trading)
+  skipHours: SkipHoursSettings;
   
   // Stop-loss
   stopLoss: StopLossSettings;
@@ -134,10 +148,10 @@ export const FACTORY_DEFAULTS: BotSettings = {
     autoClaimEnabled: false,
   },
   
-  // Trading window: minutes 45-59
+  // Trading window: minutes 45-53
   tradingWindow: {
     startMinute: 45,
-    endMinute: 59,
+    endMinute: 53,
   },
   
   // Volatility filter - OFF by default
@@ -149,6 +163,18 @@ export const FACTORY_DEFAULTS: BotSettings = {
     maxHourlyVolatilityPercent: 2.0,
     checkSpread: false,
     maxSpreadCents: 5,
+  },
+  
+  // Skip hours - custom UTC hour ranges to avoid trading
+  skipHours: {
+    enabled: true,  // ON by default
+    ranges: [
+      { enabled: true, startHourUTC: 19, endHourUTC: 21 },  // 3-5 PM ET (19:00-21:00 UTC)
+      { enabled: true, startHourUTC: 1, endHourUTC: 3 },    // 9-11 PM ET (01:00-03:00 UTC)
+      { enabled: false, startHourUTC: 0, endHourUTC: 0 },   // Empty slot
+      { enabled: false, startHourUTC: 0, endHourUTC: 0 },   // Empty slot
+      { enabled: false, startHourUTC: 0, endHourUTC: 0 },   // Empty slot
+    ],
   },
   
   // Stop-loss - ON by default at 70¢
@@ -204,6 +230,12 @@ export function mergeSettings(base: BotSettings, overrides: Partial<BotSettings>
   if (overrides.xrp) Object.assign(result.xrp, overrides.xrp);
   if (overrides.tradingWindow) Object.assign(result.tradingWindow, overrides.tradingWindow);
   if (overrides.volatility) Object.assign(result.volatility, overrides.volatility);
+  if (overrides.skipHours) {
+    result.skipHours.enabled = overrides.skipHours.enabled ?? result.skipHours.enabled;
+    if (overrides.skipHours.ranges) {
+      result.skipHours.ranges = overrides.skipHours.ranges;
+    }
+  }
   if (overrides.stopLoss) Object.assign(result.stopLoss, overrides.stopLoss);
   if (overrides.autoClaim) Object.assign(result.autoClaim, overrides.autoClaim);
   if (overrides.autoSell) {

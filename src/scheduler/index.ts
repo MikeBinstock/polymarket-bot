@@ -393,6 +393,40 @@ export class TradingScheduler {
   }
 
   /**
+   * Check if current hour is in a skip range (UTC)
+   * Returns the skip range if found, null otherwise
+   */
+  isInSkipHourRange(): { skipped: boolean; range?: { start: number; end: number } } {
+    const settings = getSettingsManager().getAll();
+    
+    if (!settings.skipHours.enabled) {
+      return { skipped: false };
+    }
+    
+    const now = new Date();
+    const currentHourUTC = now.getUTCHours();
+    
+    for (const range of settings.skipHours.ranges) {
+      if (!range.enabled) continue;
+      
+      // Handle ranges that wrap around midnight (e.g., 23:00 - 02:00)
+      if (range.startHourUTC <= range.endHourUTC) {
+        // Normal range (e.g., 19:00 - 21:00)
+        if (currentHourUTC >= range.startHourUTC && currentHourUTC < range.endHourUTC) {
+          return { skipped: true, range: { start: range.startHourUTC, end: range.endHourUTC } };
+        }
+      } else {
+        // Wrapping range (e.g., 23:00 - 02:00)
+        if (currentHourUTC >= range.startHourUTC || currentHourUTC < range.endHourUTC) {
+          return { skipped: true, range: { start: range.startHourUTC, end: range.endHourUTC } };
+        }
+      }
+    }
+    
+    return { skipped: false };
+  }
+
+  /**
    * Start the scheduler (runs every 1 second by default for fast opportunity capture)
    * Note: 6-field cron format for seconds: seconds minutes hours day month weekday
    */
@@ -793,6 +827,13 @@ export class TradingScheduler {
             logger.info(`Found ${opportunities.length} ${crypto} opportunities with expensive side (≥${thresholdPct}¢)`);
             
             if (inTradingWindow) {
+              // Check skip hours before executing trades
+              const skipCheck = this.isInSkipHourRange();
+              if (skipCheck.skipped) {
+                logger.warn(`⏭️ SKIP HOURS: Current hour (${new Date().getUTCHours()}:00 UTC) is in skip range ${skipCheck.range?.start}:00-${skipCheck.range?.end}:00 UTC`);
+                continue;
+              }
+              
               // Run volatility filter before executing trades
               if (this.volatilityFilterEnabled) {
                 const quickCheck = this.volatilityFilter.quickCheck();
@@ -920,9 +961,12 @@ export class TradingScheduler {
           
           // Only execute trades if:
           // 1. This specific crypto toggle is ON
-          // 2. Currently in trading window (minutes 45-59)
+          // 2. Currently in trading window (minutes 45-53)
+          // 3. Not in a skip hour range
           const inWindow = this.isInTradingWindow();
-          if (opportunities.length > 0 && isEnabled && inWindow) {
+          const skipCheck = this.isInSkipHourRange();
+          
+          if (opportunities.length > 0 && isEnabled && inWindow && !skipCheck.skipped) {
             logger.info(`✅ Executing ${c} trades: ${opportunities.length} opportunities, in window, toggle ON`);
             const trades = await this.executor.executeSingleLegTrades(opportunities);
             totalTradesExecuted += trades.length;
@@ -932,6 +976,8 @@ export class TradingScheduler {
               logger.info(`⛔ ${c} has ${opportunities.length} opportunity(ies) but toggle is OFF`);
             } else if (!inWindow) {
               logger.info(`⏰ ${c} has ${opportunities.length} opportunity(ies) but outside trading window (minute ${new Date().getMinutes()})`);
+            } else if (skipCheck.skipped) {
+              logger.info(`⏭️ ${c} has ${opportunities.length} opportunity(ies) but in skip hour range (${skipCheck.range?.start}:00-${skipCheck.range?.end}:00 UTC)`);
             }
           }
         } catch (err: any) {
@@ -968,9 +1014,13 @@ export class TradingScheduler {
     tradingWindowStart: number;
     tradingWindowEnd: number;
     currentMinute: number;
+    currentHourUTC: number;
     minutesUntilWindow: number;
+    inSkipHourRange: boolean;
+    skipHourRangeInfo: { start: number; end: number } | null;
   } {
     const settings = getSettingsManager().getAll();
+    const skipCheck = this.isInSkipHourRange();
     return {
       isRunning: this.isRunning,
       lastScanTime: this.lastScanTime?.toISOString() || null,
@@ -983,7 +1033,10 @@ export class TradingScheduler {
       tradingWindowStart: this.tradingWindowStart,
       tradingWindowEnd: this.tradingWindowEnd,
       currentMinute: new Date().getMinutes(),
+      currentHourUTC: new Date().getUTCHours(),
       minutesUntilWindow: this.getMinutesUntilTradingWindow(),
+      inSkipHourRange: skipCheck.skipped,
+      skipHourRangeInfo: skipCheck.range || null,
     };
   }
 

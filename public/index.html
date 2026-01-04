@@ -794,6 +794,23 @@
           </div>
         </div>
         <div class="claim-box">
+          <div class="claim-title">Lookup Condition ID</div>
+          <div class="claim-row">
+            <input type="text" id="polymarketUrl" class="claim-input" placeholder="Paste Polymarket URL...">
+            <button class="btn btn-secondary" id="lookupConditionBtn">Lookup</button>
+          </div>
+          <div id="lookupResult" style="display: none; margin-top: 12px; padding: 12px; background: #f5f5f7; border-radius: 12px;">
+            <div style="font-size: 13px; color: #666; margin-bottom: 4px;">Found:</div>
+            <div id="lookupTitle" style="font-weight: 500; margin-bottom: 8px;"></div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <code id="lookupConditionId" style="flex: 1; font-size: 11px; background: #fff; padding: 8px; border-radius: 6px; word-break: break-all;"></code>
+              <button class="btn btn-secondary" id="copyConditionBtn" style="padding: 6px 12px;">Copy</button>
+              <button class="btn btn-primary" id="useConditionBtn" style="padding: 6px 12px;">Use</button>
+            </div>
+            <div id="lookupNegRisk" style="font-size: 12px; color: #666; margin-top: 8px;"></div>
+          </div>
+        </div>
+        <div class="claim-box">
           <div class="claim-title">Manual Claim</div>
           <div class="claim-row">
             <input type="text" id="manualConditionId" class="claim-input" placeholder="Condition ID (0x...)">
@@ -1161,6 +1178,9 @@
     document.getElementById('bulkClaimBtn')?.addEventListener('click', bulkClaimAllHourly);
     document.getElementById('manualClaimBtn')?.addEventListener('click', manualClaimPosition);
     document.getElementById('exportCsvBtn')?.addEventListener('click', exportTradesToCsv);
+    document.getElementById('lookupConditionBtn')?.addEventListener('click', lookupConditionId);
+    document.getElementById('copyConditionBtn')?.addEventListener('click', copyConditionId);
+    document.getElementById('useConditionBtn')?.addEventListener('click', useConditionId);
 
     async function apiCall(endpoint, method = 'GET', body = null) {
       try {
@@ -1373,6 +1393,41 @@
         await apiCall('/positions/claim-all-hourly', 'POST', { daysBack: days });
         toast('Claim started');
       } catch (e) { toast('Failed', true); }
+    }
+
+    let lastLookupData = null;
+    
+    async function lookupConditionId() {
+      const url = document.getElementById('polymarketUrl').value.trim();
+      if (!url) { toast('Enter URL', true); return; }
+      try {
+        const res = await apiCall('/lookup-condition-id', 'POST', { url });
+        if (res.success && res.data) {
+          lastLookupData = res.data;
+          document.getElementById('lookupResult').style.display = 'block';
+          document.getElementById('lookupTitle').textContent = res.data.title;
+          document.getElementById('lookupConditionId').textContent = res.data.conditionId;
+          document.getElementById('lookupNegRisk').textContent = res.data.negRisk ? '⚠️ This is a Neg Risk market' : '✓ Standard market';
+          toast('Found!');
+        } else {
+          toast('Not found', true);
+        }
+      } catch (e) { toast('Lookup failed', true); }
+    }
+    
+    function copyConditionId() {
+      const id = document.getElementById('lookupConditionId').textContent;
+      navigator.clipboard.writeText(id);
+      toast('Copied!');
+    }
+    
+    function useConditionId() {
+      const id = document.getElementById('lookupConditionId').textContent;
+      document.getElementById('manualConditionId').value = id;
+      if (lastLookupData?.negRisk) {
+        document.getElementById('negRiskCheckbox').checked = true;
+      }
+      toast('Ready to claim');
     }
 
     async function manualClaimPosition() {

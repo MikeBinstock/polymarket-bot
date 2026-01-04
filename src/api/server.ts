@@ -488,6 +488,64 @@ export function createServer(
     }
   });
 
+  // Lookup condition ID from Polymarket URL
+  app.post('/api/lookup-condition-id', async (req: Request, res: Response) => {
+    try {
+      const { url } = req.body;
+      
+      if (!url) {
+        res.status(400).json({ success: false, error: 'URL required' });
+        return;
+      }
+
+      // Extract event slug from URL
+      // URL format: https://polymarket.com/event/bitcoin-up-or-down-january-3-8pm-et/...
+      const urlMatch = url.match(/polymarket\.com\/event\/([^\/\?]+)/);
+      if (!urlMatch) {
+        res.status(400).json({ success: false, error: 'Invalid Polymarket URL format' });
+        return;
+      }
+
+      const eventSlug = urlMatch[1];
+      logger.info(`Looking up condition ID for event: ${eventSlug}`);
+
+      // Fetch from Gamma API
+      const response = await fetch(`https://gamma-api.polymarket.com/events?slug=${eventSlug}`);
+      if (!response.ok) {
+        res.status(500).json({ success: false, error: `API error: ${response.status}` });
+        return;
+      }
+
+      const events = await response.json() as any[];
+      if (!events || events.length === 0) {
+        res.status(404).json({ success: false, error: 'Event not found' });
+        return;
+      }
+
+      const event = events[0];
+      const market = event.markets?.[0];
+      
+      if (!market?.conditionId) {
+        res.status(404).json({ success: false, error: 'No condition ID found for this event' });
+        return;
+      }
+
+      res.json({ 
+        success: true, 
+        data: {
+          conditionId: market.conditionId,
+          title: event.title || market.question,
+          closed: event.closed || market.closed,
+          negRisk: market.negRisk || event.enableNegRisk || false,
+          outcomePrices: market.outcomePrices,
+        }
+      });
+    } catch (error: any) {
+      logger.error('Failed to lookup condition ID', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to lookup condition ID' });
+    }
+  });
+
   // Manual claim by condition ID
   app.post('/api/positions/claim/:conditionId', async (req: Request, res: Response) => {
     try {
